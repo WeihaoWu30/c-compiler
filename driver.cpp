@@ -1,23 +1,37 @@
 #include <cstdlib>
 #include <iostream>
 #include <format>
-#include <cunistd.h>
+#include <unistd.h>
+
+struct Command{
+   char* preprocess[7];
+   char* compile[1];
+   char* assemble[5];
+};
 
 void main(int argc, char* argv[]){
   if (argc == 1) exit(1);
 
-  char* cmds[][] = {
+
+
+  Command cmds = {
     {"gcc", "-E", "-P", argv[1], "-o", "preprocessed.i", nullptr},
     {/*compile*/},
-    {"gcc assembly.s -o a.out", nullptr}
+    {"gcc",  "assembly.s", "-o", "a.out", nullptr}
   };
-  pid_t pid = fork();
 
   for (int i = 0; i < 4; i++){
+    pid_t pid = fork();
     if (pid == 0){
-      execvp(args[i][0], args[i]);
-      perror("error");
-      exit(1);
+      if (i == 0){
+         execvp(cmds.preprocess[0], cmds.preprocess);
+      }
+      else if (i == 1){
+         //compile
+      }
+      else if (i == 2){
+         execvp(cmds.assemble[0], cmds.assemble);
+      }
     }
     else if (pid > 0){
       wait(nullptr);
