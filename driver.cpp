@@ -2,26 +2,53 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define PREPROCESSED_FILE "preprocessed.i"
+
 void preprocess(char *filename) {
   if (!fork()) {
-    execl("gcc", "-E", "-P", filename, "-o", "preprocessed.i");
+    execlp("gcc", "gcc", "-E", "-P", filename, "-o", "preprocessed.i",
+           (char *)nullptr);
   } else {
     wait(nullptr);
   }
 }
 
-// change this
+// Compile Lexer
 void compile(char *filename) {
   if (!fork()) {
-    execl("gcc", "-E", "-P", filename, "-o", "preprocessed.i");
-  } else {
-    wait(nullptr);
+    execlp("g++", "g++", "lexer.cpp", "-o", "lexer", (char *)nullptr);
+    // execlp("gcc", "-S", "-O", "-fno-asynchronous-unwind-tables",
+    // "-fcf-protection=none", filename);
+    _exit(1);
   }
+  wait(nullptr);
+
+  if (!fork()) {
+    execl("./lexer", "./lexer", filename, (char *)nullptr);
+    _exit(1);
+  }
+  wait(nullptr);
 }
 
-void assemble() {
+void cleanup() {
   if (!fork()) {
-    execl("gcc", "assembly.s");
+    execlp("rm", "rm", PREPROCESSED_FILE, (char *)nullptr);
+    // execlp("gcc", "-S", "-O", "-fno-asynchronous-unwind-tables",
+    // "-fcf-protection=none", filename);
+    _exit(1);
+  }
+  wait(nullptr);
+
+  if (!fork()) {
+    execlp("rm", "rm", "lexer", (char *)nullptr);
+    _exit(1);
+  }
+  wait(nullptr);
+}
+
+void assemble(char *filename) {
+  if (!fork()) {
+    execlp("gcc", filename);
   } else {
     wait(nullptr);
   }
@@ -32,8 +59,9 @@ int main(int argc, char *argv[]) {
     return 1;
 
   preprocess(argv[1]);
-  // compile();
-  assemble();
+  compile(PREPROCESSED_FILE);
+  cleanup();
+  // assemble("preprocessed.s");
 
   // Compile the preproccesd source file and output an assembly file...delete
   // preprocessed file after
