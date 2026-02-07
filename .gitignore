@@ -1,2 +1,6 @@
 driver.cpp~
 lexer.cpp~
+*.out
+*.out.dSYM
+*.i
+*.s
