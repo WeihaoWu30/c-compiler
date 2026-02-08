@@ -35,7 +35,6 @@ int main(int argc, char *argv[]) {
         if (std::regex_search(line, matches, patterns[i])) {
           long pos = matches.position(0);
           if (pos == 0) {
-            // std::cout << matches.str(0) << std::endl;
             line = line.substr(matches.length(pos));
             tokens.push_back(matches.str(pos));
             found = true;
@@ -44,8 +43,8 @@ int main(int argc, char *argv[]) {
         }
       }
       if (!found) {
-        std::cout << "No Regex Pattern Found For " << line << std::endl;
-        exit(1);
+        std::cerr << "No Regex Pattern Found For " << line << std::endl;
+        return 1;
       }
     }
   }
