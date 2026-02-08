@@ -1,17 +1,17 @@
 #include <algorithm>
-#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <regex>
 #include <string>
 #include <unistd.h>
-#include <vector>
+#include <list>
+#include <cstdlib>
 
 void trim(std::string &s) {
   s.erase(s.begin(), std::find_if_not(s.begin(), s.end(),
                                       [](const char &c) { return c == ' '; }));
 }
-int main(int argc, char *argv[]) {
+std::list<std::string>> lex(const std::string& filename) {
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
                                       std::regex("return\\b"),
@@ -25,8 +25,8 @@ int main(int argc, char *argv[]) {
 
   std::string line;
   std::smatch matches;
-  std::vector<std::string> tokens;
-  std::ifstream istr(argv[1]);
+  std::list<std::string> tokens;
+  std::ifstream istr(filename);
 
   while (istr >> line) {
     while (line.size() > 0) {
@@ -43,11 +43,11 @@ int main(int argc, char *argv[]) {
         }
       }
       if (!found) {
-        std::cerr << "No Regex Pattern Found For " << line << std::endl;
-        return 1;
+        std::cerr << "Illegal Expression: " << line << std::endl;
+        exit(1);
       }
     }
   }
 
-  return 0;
+  return tokens;
 }
