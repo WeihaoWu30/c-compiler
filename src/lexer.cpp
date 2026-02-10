@@ -11,7 +11,7 @@ void trim(std::string &s) {
   s.erase(s.begin(), std::find_if_not(s.begin(), s.end(),
                                       [](const char &c) { return c == ' '; }));
 }
-std::list<std::string>> lex(const std::string& filename) {
+std::list<std::string> lex(const std::string& filename) {
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
                                       std::regex("return\\b"),
@@ -35,8 +35,8 @@ std::list<std::string>> lex(const std::string& filename) {
         if (std::regex_search(line, matches, patterns[i])) {
           long pos = matches.position(0);
           if (pos == 0) {
-            line = line.substr(matches.length(pos));
             tokens.push_back(matches.str(pos));
+            line = line.substr(matches.length(pos));
             found = true;
             break;
           }

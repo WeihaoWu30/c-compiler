@@ -1,8 +1,10 @@
-#include <cstring>
-#include <sys/wait.h>
-#include <unistd.h>
 #include "lexer.h"
 #include "parser.h"
+#include <cstring>
+#include <list>
+#include <string>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #define PREPROCESSED_FILE "preprocessed.i"
 
@@ -17,7 +19,7 @@ void preprocess(char *filename) {
 
 void cleanup() {
   if (!fork()) {
-    execlp("rm", "rm", PREPROCESSED_FILE, "lexer", (char *)nullptr);
+    execlp("rm", "rm", PREPROCESSED_FILE, (char *)nullptr);
     // execlp("gcc", "-S", "-O", "-fno-asynchronous-unwind-tables",
     // "-fcf-protection=none", filename);
     _exit(1);
@@ -33,32 +35,30 @@ void assemble(char *filename) {
   }
 }
 
-
 int main(int argc, char *argv[]) {
-  if (argc < 2) return 1;
+  if (argc < 2) {
+    return 1;
+  }
   std::list<std::string> tokens;
-  
+
   preprocess(argv[1]);
-  if(argc > 2) {
-    switch(argv[2]){
-      case "--lex":
-        lex(PREPROCESSED_FILE);
-        break;
-      case "--parse":
-        tokens = lex(PREPROCESSED_FILE);
-        parse(tokens);
-        break;
-      case "--codegen":
-        tokens = lex(PREPROCESSED_FILE);
-        parse(tokens);
-        //codegen();
-        break;
+  if (argc > 2) {
+    std::string s(argv[2]);
+    if (s.compare("--lex") == 0) {
+      lex(PREPROCESSED_FILE);
+    } else if (s.compare("--parse") == 0) {
+      tokens = lex(PREPROCESSED_FILE);
+      parse(tokens);
+    } else if (s.compare("--codegen") == 0) {
+      tokens = lex(PREPROCESSED_FILE);
+      parse(tokens);
+    }
   } else {
     tokens = lex(PREPROCESSED_FILE);
     parse(tokens);
     // codegen();
   }
-  cleanup();
+  // cleanup();
   // assemble("preprocessed.s");
 
   return 0;
