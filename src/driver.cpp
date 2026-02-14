@@ -1,35 +1,42 @@
+#include "aast.h"
+#include "ast.h"
+#include "codegen.h"
 #include "lexer.h"
 #include "parser.h"
 #include <cstring>
+#include <fstream>
 #include <list>
 #include <string>
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define PREPROCESSED_FILE "preprocessed.i"
+#define PPF "preprocessed.i"
+#define AF "assembly.s"
 
 void preprocess(char *filename) {
   if (!fork()) {
-    execlp("gcc", "gcc", "-E", "-P", filename, "-o", PREPROCESSED_FILE,
-           (char *)nullptr);
+    execlp("gcc", "gcc", "-E", "-P", filename, "-o", PPF, (char *)nullptr);
+    _exit(1);
   } else {
     wait(nullptr);
   }
 }
 
-void cleanup() {
+void cleanup(Program *&program, AProgram *&assembly_program) {
+  delete program;
+  delete assembly_program;
   if (!fork()) {
-    execlp("rm", "rm", PREPROCESSED_FILE, (char *)nullptr);
-    // execlp("gcc", "-S", "-O", "-fno-asynchronous-unwind-tables",
-    // "-fcf-protection=none", filename);
+    execlp("rm", "rm", PPF, AF, (char *)nullptr);
     _exit(1);
   }
   wait(nullptr);
 }
 
-void assemble(char *filename) {
+void execute(const char *filename) {
+	std::cout << filename << std::endl;
   if (!fork()) {
-    execlp("gcc", filename);
+    execlp("gcc", "gcc", AF, "-o", filename, (char *)nullptr);
+    _exit(1);
   } else {
     wait(nullptr);
   }
@@ -40,26 +47,39 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   std::list<std::string> tokens;
-
-  preprocess(argv[1]);
-  if (argc > 2) {
-    std::string s(argv[2]);
-    if (s.compare("--lex") == 0) {
-      lex(PREPROCESSED_FILE);
-    } else if (s.compare("--parse") == 0) {
-      tokens = lex(PREPROCESSED_FILE);
-      parse(tokens);
+  Program *program = nullptr;
+  AProgram *assembly_program = nullptr;
+  if (argc == 3) {
+    preprocess(argv[2]);
+    tokens = lex(PPF);
+    std::string s(argv[1]);
+    if (s.compare("--lex") == 0)
+      return 0;
+    if (s.compare("--parse") == 0) {
+      program = parse(tokens);
     } else if (s.compare("--codegen") == 0) {
-      tokens = lex(PREPROCESSED_FILE);
-      parse(tokens);
+      program = parse(tokens);
+      assembly_program = codegen(program);
     }
   } else {
-    tokens = lex(PREPROCESSED_FILE);
-    parse(tokens);
-    // codegen();
-  }
-  // cleanup();
-  // assemble("preprocessed.s");
+    preprocess(argv[1]);
+    tokens = lex(PPF);
+    program = parse(tokens);
+    assembly_program = codegen(program);
+    std::ofstream ostr(AF);
+    if (!ostr) {
+      std::cerr << "Failed To Open Assembly File" << std::endl;
+      return 1;
+    }
 
+    ostr << *(assembly_program);
+    ostr.close();
+
+    std::string s(argv[1]);
+    s.erase(s.size() - 2);
+    execute(s.c_str());
+  }
+
+  cleanup(program, assembly_program);
   return 0;
 }

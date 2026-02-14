@@ -1,12 +1,9 @@
-#include "function.h"
-#include "identifier.h"
-#include "program.h"
-#include "return.h"
 #include <iostream>
+#include "ast.h"
 
-class Program;
-class Function;
-class Identifier;
+struct Program;
+struct Function;
+struct Identifier;
 
 std::ostream &operator<<(std::ostream &ostr, const Program &program) {
   ostr << "Program(" << std::endl;

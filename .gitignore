@@ -4,3 +4,6 @@ lexer.cpp~
 *.out.dSYM
 *.i
 *.s
+compile_commands.json
+bin/
+.cache/

@@ -1,6 +1,5 @@
 #ifndef __LEXER_H__
 #define __LEXER_H__
-#include <iostream>
 #include <list>
 
 void trim(std::string &s);

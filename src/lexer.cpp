@@ -1,17 +1,17 @@
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <list>
 #include <regex>
 #include <string>
 #include <unistd.h>
-#include <list>
-#include <cstdlib>
 
 void trim(std::string &s) {
   s.erase(s.begin(), std::find_if_not(s.begin(), s.end(),
                                       [](const char &c) { return c == ' '; }));
 }
-std::list<std::string> lex(const std::string& filename) {
+std::list<std::string> lex(const std::string &filename) {
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
                                       std::regex("return\\b"),
