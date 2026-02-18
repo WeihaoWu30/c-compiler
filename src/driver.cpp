@@ -1,8 +1,10 @@
 #include "aast.h"
 #include "ast.h"
+#include "tacky.h"
 #include "codegen.h"
 #include "lexer.h"
 #include "parser.h"
+#include "ir_gen.h"
 #include <cstring>
 #include <fstream>
 #include <list>
@@ -22,9 +24,10 @@ void preprocess(char *filename) {
   }
 }
 
-void cleanup(Program *&program, AProgram *&assembly_program) {
+void cleanup(Program *&program, AProgram *&assembly_program, TProgram *&tacky_program) {
   delete program;
   delete assembly_program;
+  delete tacky_program;
   if (!fork()) {
     execlp("rm", "rm", PPF, AF, (char *)nullptr);
     _exit(1);
@@ -49,16 +52,20 @@ int main(int argc, char *argv[]) {
   std::list<std::string> tokens;
   Program *program = nullptr;
   AProgram *assembly_program = nullptr;
+  TProgram *tacky_program = nullptr;
   if (argc == 3) {
     preprocess(argv[2]);
     tokens = lex(PPF);
     std::string s(argv[1]);
-    if (s.compare("--lex") == 0)
-      return 0;
+    if (s.compare("--lex") == 0) return 0;
     if (s.compare("--parse") == 0) {
       program = parse(tokens);
+    } else if (s.compare("--tacky") == 0){
+      program = parse(tokens);
+      tacky_program = generate_tacky(program);
     } else if (s.compare("--codegen") == 0) {
       program = parse(tokens);
+      tacky_program = generate_tacky(program);
       assembly_program = codegen(program);
     }
   } else {
@@ -80,6 +87,6 @@ int main(int argc, char *argv[]) {
     execute(s.c_str());
   }
 
-  cleanup(program, assembly_program);
+  cleanup(program, assembly_program, tacky_program);
   return 0;
 }

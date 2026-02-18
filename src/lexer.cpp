@@ -21,7 +21,10 @@ std::list<std::string> lex(const std::string &filename) {
                                       std::regex("\\)"),
                                       std::regex("\\{"),
                                       std::regex("\\}"),
-                                      std::regex(";")};
+                                      std::regex(";"),
+                                      std::regex("--"),
+                                      std::regex("-"),
+                                      std::regex("~")};
 
   std::string line;
   std::smatch matches;
@@ -31,20 +34,24 @@ std::list<std::string> lex(const std::string &filename) {
   while (istr >> line) {
     while (line.size() > 0) {
       bool found = false;
+      std::string longestMatch;
+      long len = 0;
       for (unsigned int i = 0; i < patterns.size(); ++i) {
         if (std::regex_search(line, matches, patterns[i])) {
           long pos = matches.position(0);
-          if (pos == 0) {
-            tokens.push_back(matches.str(pos));
-            line = line.substr(matches.length(pos));
+          if (pos == 0 && matches.length(pos) > len) {
+            longestMatch = matches.str(pos);
+            len = matches.length(pos);
             found = true;
-            break;
           }
         }
       }
       if (!found) {
         std::cerr << "Illegal Expression: " << line << std::endl;
         exit(1);
+      } else {
+        tokens.push_back(longestMatch);
+        line = line.substr(len);
       }
     }
   }

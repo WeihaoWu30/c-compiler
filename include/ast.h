@@ -39,6 +39,31 @@ protected:
   }
 };
 
+struct Unary_Operator {
+public:
+  virtual ~Unary_Operator() = default;
+};
+
+struct Complement : Unary_Operator {};
+
+struct Negate : Unary_Operator {};
+
+struct Unary : Expression {
+  Unary_Operator *unary_operator;
+  Expression *exp;
+  Unary(Unary_Operator *unary_operator_, Expression *exp_)
+      : unary_operator(unary_operator_), exp(exp_) {}
+  ~Unary() {
+    delete unary_operator;
+    delete exp;
+  }
+  void print(std::ostream &ostr) const override {
+    ostr << "Unary Operator(" << std::endl;
+    ostr << exp;
+    ostr << ")";
+  }
+};
+
 struct Identifier {
   std::string name;
   Identifier(std::string name_) : name(name_) {}
