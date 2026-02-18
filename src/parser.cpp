@@ -4,32 +4,73 @@
 #include <list>
 #include <string>
 
-void expect(std::string expected, std::list<std::string> &tokens) {
+void expect(std::string expected, std::list<std::string> &tokens)
+{
   std::string actual(*tokens.begin());
-  if (actual == expected) {
+  if (actual == expected)
+  {
     tokens.erase(tokens.begin());
-  } else {
+  }
+  else
+  {
     std::cerr << "Expected " << expected << " but found " << actual
               << std::endl;
     exit(1);
   }
 }
 
-Constant *parse_expression(std::list<std::string> &tokens) {
-  Constant *exp = new Constant(std::stoi(*tokens.begin()));
-  tokens.erase(tokens.begin());
-  return exp;
+Unary_Operator *parse_unop(std::list<std::string> &tokens)
+{
+  if (*tokens.begin() == "~"){
+    Complement* complement = new Complement();
+    return complement;
+  }
+  Negate* negate = new Negate();
+  return negate;
 }
 
-Return *parse_statement(std::list<std::string> &tokens) {
+Expression *parse_expression(std::list<std::string> &tokens)
+{
+  std::string next_token(*tokens.begin());
+  char *endptr;
+  std::strtol(next_token.c_str(), &endptr, 10); // currently just supports base 10
+  if (*endptr == '\0')
+  {
+    Constant *constant = new Constant(std::stoi(next_token));
+    tokens.erase(tokens.begin());
+    return constant;
+  }
+  else if (next_token == "~" || next_token == "-")
+  {
+    Unary_Operator* unary_operator = parse_unop(tokens);
+    tokens.erase(tokens.begin());
+    Expression* inner_exp = parse_expression(tokens);
+    Unary* unop = new Unary(unary_operator, inner_exp);
+    return unop;
+  }
+  else if (next_token == "("){
+    tokens.erase(tokens.begin());
+    Expression* inner_exp = parse_expression(tokens);
+    expect(")", tokens);
+    return inner_exp;
+  }
+  else{
+    std::cerr << "Malformed Expression" << std::endl;
+    exit(1);
+  }
+}
+
+Return *parse_statement(std::list<std::string> &tokens)
+{
   expect("return", tokens);
-  Constant *return_val = parse_expression(tokens);
+  Expression *return_val = parse_expression(tokens);
   expect(";", tokens);
   Return *ret = new Return(return_val);
   return ret;
 }
 
-Function *parse_function(std::list<std::string> &tokens) {
+Function *parse_function(std::list<std::string> &tokens)
+{
   expect("int", tokens);
   expect("main", tokens);
   Identifier *func_name = new Identifier("main");
@@ -39,7 +80,8 @@ Function *parse_function(std::list<std::string> &tokens) {
   expect("{", tokens);
   Function *func = new Function(func_name, parse_statement(tokens));
   expect("}", tokens);
-  if (!tokens.empty()) {
+  if (!tokens.empty())
+  {
     std::cerr << "Extra Characters Found For Minimal Compiler" << std::endl;
     exit(1);
   }
@@ -48,7 +90,8 @@ Function *parse_function(std::list<std::string> &tokens) {
 
 void pretty_print(const Program *p) { std::cout << *p << std::endl; }
 
-Program *parse(std::list<std::string> &tokens) {
+Program *parse(std::list<std::string> &tokens)
+{
   Function *function_definition = parse_function(tokens);
   Program *program = new Program(function_definition);
   pretty_print(program);
