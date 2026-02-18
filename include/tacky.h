@@ -53,7 +53,6 @@ struct TUnary : TInstruction
     ~TUnary() {
         delete unary_operator;
         delete src; 
-        delete dst; 
     }
 };
 

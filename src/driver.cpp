@@ -25,13 +25,9 @@ void preprocess(char *filename) {
 }
 
 void cleanup(Program *&program, AProgram *&assembly_program, TProgram *&tacky_program) {
-  std::cout << "JORKING" << std::endl;
   delete program;
-  std::cout << "MOGGING" << std::endl;
   delete assembly_program;
-  std::cout << "EDGING" << std::endl;
   delete tacky_program;
-  std::cout << "OILING" << std::endl;
   if (!fork()) {
     execlp("rm", "rm", PPF, AF, (char *)nullptr);
     _exit(1);
@@ -92,6 +88,5 @@ int main(int argc, char *argv[]) {
   }
 
   cleanup(program, assembly_program, tacky_program);
-  std::cout << "CRACKING" << std::endl;
   return 0;
 }
