@@ -19,7 +19,10 @@ gcc -S -O -fno-asynchronous-unwind-tables -fcf-protection=none <filename>
 gcc -E -P <input_file> -o <preprocessed_file>
 
 ## Compile Compiler
-g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc
+### Make a bin folder if you haven't done so already
+mkdir bin
+### Compile With C++
+g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g
 
 ## Compiler Options
 - ./zwcc --lex <filename>
