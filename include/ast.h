@@ -3,15 +3,28 @@
 #include <iostream>
 #include <string>
 
-struct Statement {
+struct Unary_Operator {
 public:
-  virtual ~Statement() = default;
-
+  virtual ~Unary_Operator() = default;
 protected:
   virtual void print(std::ostream &ostr) const = 0;
-  friend std::ostream &operator<<(std::ostream &ostr, const Statement &ret) {
-    ret.print(ostr);
+  friend std::ostream &operator<<(std::ostream&ostr, const Unary_Operator &unary_operator) {
+    unary_operator.print(ostr);
     return ostr;
+  }
+};
+
+struct Complement : Unary_Operator {
+protected:
+  void print(std::ostream &ostr) const override {
+    ostr << "Unary Operator(" << "~" << ")" << std::endl;
+  }
+};
+
+struct Negate : Unary_Operator {
+protected:
+  void print(std::ostream &ostr) const override {
+    ostr << "Unary Operator(" << "-" << ")" << std::endl;
   }
 };
 
@@ -31,22 +44,12 @@ struct Constant : Expression {
 public:
   int val;
   Constant(int val_) : val(val_) {}
-  friend std::ostream &operator<<(std::ostream &ostr, const Constant &constant);
 
 protected:
   void print(std::ostream &ostr) const override {
     ostr << "Constant(" << val << ")" << std::endl;
   }
 };
-
-struct Unary_Operator {
-public:
-  virtual ~Unary_Operator() = default;
-};
-
-struct Complement : Unary_Operator {};
-
-struct Negate : Unary_Operator {};
 
 struct Unary : Expression {
   Unary_Operator *unary_operator;
@@ -58,9 +61,10 @@ struct Unary : Expression {
     delete exp;
   }
   void print(std::ostream &ostr) const override {
-    ostr << "Unary Operator(" << std::endl;
-    ostr << exp;
-    ostr << ")";
+    ostr << "Unary(" << std::endl;
+    ostr << "\t\t\t\t" << *unary_operator;
+    ostr << "\t\t\t\t" << *exp;
+    ostr << "\t\t\t)";
   }
 };
 
@@ -69,6 +73,18 @@ struct Identifier {
   Identifier(std::string name_) : name(name_) {}
   friend std::ostream &operator<<(std::ostream &ostr,
                                   const Identifier &identifier);
+};
+
+struct Statement {
+public:
+  virtual ~Statement() = default;
+
+protected:
+  virtual void print(std::ostream &ostr) const = 0;
+  friend std::ostream &operator<<(std::ostream &ostr, const Statement &ret) {
+    ret.print(ostr);
+    return ostr;
+  }
 };
 
 struct Return : Statement {

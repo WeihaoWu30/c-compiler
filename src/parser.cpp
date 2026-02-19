@@ -21,7 +21,9 @@ void expect(std::string expected, std::list<std::string> &tokens)
 
 Unary_Operator *parse_unop(std::list<std::string> &tokens)
 {
-  if (*tokens.begin() == "~"){
+  std::string next_token(*tokens.begin());
+  tokens.erase(tokens.begin());
+  if (next_token == "~"){
     Complement* complement = new Complement();
     return complement;
   }
@@ -31,6 +33,7 @@ Unary_Operator *parse_unop(std::list<std::string> &tokens)
 
 Expression *parse_expression(std::list<std::string> &tokens)
 {
+  if (tokens.empty()) return nullptr;
   std::string next_token(*tokens.begin());
   char *endptr;
   std::strtol(next_token.c_str(), &endptr, 10); // currently just supports base 10
@@ -43,7 +46,6 @@ Expression *parse_expression(std::list<std::string> &tokens)
   else if (next_token == "~" || next_token == "-")
   {
     Unary_Operator* unary_operator = parse_unop(tokens);
-    tokens.erase(tokens.begin());
     Expression* inner_exp = parse_expression(tokens);
     Unary* unop = new Unary(unary_operator, inner_exp);
     return unop;

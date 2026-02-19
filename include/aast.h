@@ -3,7 +3,7 @@
 #include "ast.h"
 #include <iostream>
 #include <string>
-#include <vector>
+#include <list>
 
 struct Operand {
 public:
@@ -26,13 +26,53 @@ protected:
   void write(std::ostream &ostr) const override { ostr << "$" << val; }
 };
 
-struct Register : Operand {
+struct RegType {
 public:
-  std::string name;
-  Register() { name = "\%eax"; }
-
+  virtual ~RegType() = default;
 protected:
-  void write(std::ostream &ostr) const override { ostr << name; }
+  std::string name;
+};
+
+struct AX : RegType {
+  AX() { name = "%eax"; }
+};
+struct R10 : RegType {
+  R10() { name = "%r10d"; }
+};
+
+struct Reg : Operand {
+public:
+  RegType* reg;
+  Reg(RegType* reg_): reg(reg_) {}
+  ~Reg() { delete reg; }
+protected:
+  void write(std::ostream &ostr) const override { 
+    
+  }
+};
+
+struct AIdentifier {
+  std::string name;
+  AIdentifier(std::string &name_) : name(name_) {}
+  friend std::ostream &operator<<(std::ostream &ostr,
+                                   const Identifier &identifier);
+};
+
+struct Pseudo : Operand {
+public:
+  AIdentifier* identifier;
+  Pseudo(AIdentifier* identifier_): identifier(identifier_){}
+  ~Pseudo() { delete identifier; }
+protected:
+  void write(std::ostream &ostr) const override {};
+};
+
+struct Stack : Operand {
+public:
+  int offset;
+  Stack(int offset_): offset(offset_){}
+protected:
+  void write(std::ostream &ostr) const override {}
 };
 
 struct Instruction {
@@ -63,6 +103,34 @@ protected:
   }
 };
 
+struct AUnary_Operator{
+   virtual ~AUnary_Operator() = default;
+};
+
+struct Neg: AUnary_Operator{};
+struct Not: AUnary_Operator{};
+
+struct AUnary : Instruction {
+public:
+   AUnary_Operator *unary_operator;
+   Operand* operand;
+   AUnary(AUnary_Operator *unary_operator_, Operand* operand_): unary_operator(unary_operator_), operand(operand_){}
+   ~AUnary() {
+    delete unary_operator;
+    delete operand;
+   }
+protected:
+  void write(std::ostream &ostr) const override {}
+};
+
+struct AllocateStack : Instruction {
+public:
+   int bytes;
+   AllocateStack(int bytes_): bytes(bytes_){}
+protected:
+  void write(std::ostream& ostr) const override {}
+};
+
 struct Ret : Instruction {
 public:
   std::string name;
@@ -72,17 +140,10 @@ protected:
   void write(std::ostream &ostr) const override { ostr << name; }
 };
 
-struct AIdentifier {
-  std::string name;
-  AIdentifier(std::string &name_) : name(name_) {}
-  friend std::ostream &operator<<(std::ostream &ostr,
-                                   const Identifier &identifier);
-};
-
 struct AFunction {
   AIdentifier *name;
-  std::vector<Instruction *> instructions;
-  AFunction(AIdentifier *name_, std::vector<Instruction *> &instructions_)
+  std::list<Instruction *> instructions;
+  AFunction(AIdentifier *name_, std::list<Instruction *> &instructions_)
       : name(name_), instructions(instructions_) {}
   ~AFunction() {
     delete name;

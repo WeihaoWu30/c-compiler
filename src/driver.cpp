@@ -66,13 +66,14 @@ int main(int argc, char *argv[]) {
     } else if (s.compare("--codegen") == 0) {
       program = parse(tokens);
       tacky_program = generate_tacky(program);
-      assembly_program = codegen(program);
+      assembly_program = generate_top_level(tacky_program);
     }
   } else {
     preprocess(argv[1]);
     tokens = lex(PPF);
     program = parse(tokens);
-    assembly_program = codegen(program);
+    tacky_program = generate_tacky(program);
+    assembly_program = generate_top_level(tacky_program);
     std::ofstream ostr(AF);
     if (!ostr) {
       std::cerr << "Failed To Open Assembly File" << std::endl;
@@ -85,8 +86,7 @@ int main(int argc, char *argv[]) {
     std::string s(argv[1]);
     s.erase(s.size() - 2);
     execute(s.c_str());
+    cleanup(program, assembly_program, tacky_program);
   }
-
-  cleanup(program, assembly_program, tacky_program);
   return 0;
 }
