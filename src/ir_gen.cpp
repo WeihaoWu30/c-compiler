@@ -4,7 +4,7 @@
 #include <string>
 #include <iostream>
 
-int COUNTER = 0;
+uint32_t COUNTER = 0;
 
 TIdentifier* make_temporary() {
     return new TIdentifier("tmp." + std::to_string(COUNTER++));
