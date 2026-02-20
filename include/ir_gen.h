@@ -3,6 +3,7 @@
 #include "tacky.h"
 #include <vector>
 #include "ast.h"
+extern uint32_t counter;
 
 TIdentifier* make_temporary();
 TUnary_Operator* convert_unop(Unary_Operator* exp);

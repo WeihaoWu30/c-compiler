@@ -67,6 +67,7 @@ int main(int argc, char *argv[]) {
       program = parse(tokens);
       tacky_program = generate_tacky(program);
       assembly_program = generate_top_level(tacky_program);
+      std::cout << "MOGGING" << std::endl;
     }
   } else {
     preprocess(argv[1]);
