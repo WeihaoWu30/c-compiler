@@ -17,14 +17,14 @@ protected:
 struct Complement : Unary_Operator {
 protected:
   void print(std::ostream &ostr) const override {
-    ostr << "Unary Operator(" << "~" << ")" << std::endl;
+    ostr << "Unary Operator(" << "~" << ")";
   }
 };
 
 struct Negate : Unary_Operator {
 protected:
   void print(std::ostream &ostr) const override {
-    ostr << "Unary Operator(" << "-" << ")" << std::endl;
+    ostr << "Unary Operator(" << "-" << ")";
   }
 };
 
@@ -47,7 +47,7 @@ public:
 
 protected:
   void print(std::ostream &ostr) const override {
-    ostr << "Constant(" << val << ")" << std::endl;
+    ostr << "Constant(" << val << ")";
   }
 };
 
@@ -61,9 +61,7 @@ struct Unary : Expression {
     delete exp;
   }
   void print(std::ostream &ostr) const override {
-    ostr << "Unary(" << std::endl;
-    ostr << "\t\t\t\t" << *unary_operator;
-    ostr << "\t\t\t\t" << *exp;
+    ostr << "Unary(" << *unary_operator << ", " << *exp << std::endl;
     ostr << "\t\t\t)";
   }
 };

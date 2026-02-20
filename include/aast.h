@@ -31,6 +31,10 @@ public:
   virtual ~RegType() = default;
 protected:
   std::string name;
+  friend std::ostream &operator<<(std::ostream &ostr, const RegType& regType) {
+    ostr << regType.name;
+    return ostr;
+  }
 };
 
 struct AX : RegType {
@@ -47,7 +51,7 @@ public:
   ~Reg() { delete reg; }
 protected:
   void write(std::ostream &ostr) const override { 
-    
+    ostr << *reg;
   }
 };
 
@@ -72,7 +76,9 @@ public:
   int offset;
   Stack(int offset_): offset(offset_){}
 protected:
-  void write(std::ostream &ostr) const override {}
+  void write(std::ostream &ostr) const override {
+    ostr << offset << "(%rbp)";
+  }
 };
 
 struct Instruction {
@@ -99,16 +105,27 @@ public:
 
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << "movl" << "\t" << *src << ", " << *dst;
+    ostr << "movl" << "\t" << *src << ", " << *dst << std::endl;
   }
 };
 
-struct AUnary_Operator{
-   virtual ~AUnary_Operator() = default;
+struct AUnary_Operator {
+public:
+  virtual ~AUnary_Operator() = default;
+protected:
+  std::string instruction;
+  friend std::ostream &operator<<(std::ostream &ostr, const AUnary_Operator& unary_operator) {
+    ostr << unary_operator.instruction;
+    return ostr;
+  }
 };
 
-struct Neg: AUnary_Operator{};
-struct Not: AUnary_Operator{};
+struct Neg: AUnary_Operator{
+  Neg() { instruction = "negl"; }
+};
+struct Not: AUnary_Operator{
+  Not() { instruction = "notl"; }
+};
 
 struct AUnary : Instruction {
 public:
@@ -120,7 +137,9 @@ public:
     delete operand;
    }
 protected:
-  void write(std::ostream &ostr) const override {}
+  void write(std::ostream &ostr) const override {
+    ostr << *unary_operator << "\t" << *operand << std::endl;
+  }
 };
 
 struct AllocateStack : Instruction {
@@ -128,7 +147,9 @@ public:
    int bytes;
    AllocateStack(int bytes_): bytes(bytes_){}
 protected:
-  void write(std::ostream& ostr) const override {}
+  void write(std::ostream& ostr) const override {
+    ostr << "subq\t$" << bytes << ", %rsp" << std::endl;
+  }
 };
 
 struct Ret : Instruction {
@@ -137,7 +158,11 @@ public:
   Ret() { name = "ret"; }
 
 protected:
-  void write(std::ostream &ostr) const override { ostr << name; }
+  void write(std::ostream &ostr) const override { 
+    ostr << "movq\t%rbp, %rsp" << std::endl;
+    ostr << "popq\t%rbp" << std::endl;
+    ostr << name << std::endl; 
+  }
 };
 
 struct AFunction {

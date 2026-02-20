@@ -4,6 +4,9 @@
 #include <list>
 #include <string>
 
+// This File is meant to convert the tokens into Abstract Syntax Tree nodes
+
+// This Function Matches A Token Against Legal Syntax
 void expect(std::string expected, std::list<std::string> &tokens)
 {
   std::string actual(*tokens.begin());
@@ -19,6 +22,7 @@ void expect(std::string expected, std::list<std::string> &tokens)
   }
 }
 
+// This function ONLY matches the next token against a bitwise negate or bitwise complement
 Unary_Operator *parse_unop(std::list<std::string> &tokens)
 {
   std::string next_token(*tokens.begin());
@@ -31,13 +35,14 @@ Unary_Operator *parse_unop(std::list<std::string> &tokens)
   return negate;
 }
 
+// This recursive function Establishes Expression Nodes
 Expression *parse_expression(std::list<std::string> &tokens)
 {
-  if (tokens.empty()) return nullptr;
+  if (tokens.empty()) return nullptr; // REQUIRED BASE CASE
   std::string next_token(*tokens.begin());
   char *endptr;
-  std::strtol(next_token.c_str(), &endptr, 10); // currently just supports base 10
-  if (*endptr == '\0')
+  std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
+  if (*endptr == '\0') // valid integer
   {
     Constant *constant = new Constant(std::stoi(next_token));
     tokens.erase(tokens.begin());
@@ -46,13 +51,13 @@ Expression *parse_expression(std::list<std::string> &tokens)
   else if (next_token == "~" || next_token == "-")
   {
     Unary_Operator* unary_operator = parse_unop(tokens);
-    Expression* inner_exp = parse_expression(tokens);
+    Expression* inner_exp = parse_expression(tokens); // A Unary Expression Can contain another Unary Expression Whitin
     Unary* unop = new Unary(unary_operator, inner_exp);
     return unop;
   }
-  else if (next_token == "("){
+  else if (next_token == "("){ // Separating Unary Operators
     tokens.erase(tokens.begin());
-    Expression* inner_exp = parse_expression(tokens);
+    Expression* inner_exp = parse_expression(tokens); 
     expect(")", tokens);
     return inner_exp;
   }
@@ -62,6 +67,7 @@ Expression *parse_expression(std::list<std::string> &tokens)
   }
 }
 
+// This function currently only handles return statements
 Return *parse_statement(std::list<std::string> &tokens)
 {
   expect("return", tokens);
@@ -71,6 +77,7 @@ Return *parse_statement(std::list<std::string> &tokens)
   return ret;
 }
 
+// This function is hardcoded and handles the entire main function
 Function *parse_function(std::list<std::string> &tokens)
 {
   expect("int", tokens);
@@ -90,9 +97,11 @@ Function *parse_function(std::list<std::string> &tokens)
   return func;
 }
 
-void pretty_print(const Program *p) { std::cout << *p << std::endl; }
+// This function is just to check AST structure
+void pretty_print(const Program *p) { std::cout << *p << std::endl; } 
 
-Program *parse(std::list<std::string> &tokens)
+// This function converts Tokens into AST Program node
+Program *parse(std::list<std::string> &tokens) 
 {
   Function *function_definition = parse_function(tokens);
   Program *program = new Program(function_definition);

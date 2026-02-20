@@ -25,8 +25,9 @@ mkdir bin
 g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g
 
 ## Compiler Options
-- ./zwcc --lex <filename>
-- ./zwcc --parse <filename>
-- ./zwcc --codegen <filename>
-- ./zwcc <filename>
+- ./bin/zwcc --lex <filename>
+- ./bin/zwcc --parse <filename>
+- ./bin/zwcc --tacky <filename>
+- ./bin/zwcc --codegen <filename>
+- ./bin/zwcc <filename>
 
