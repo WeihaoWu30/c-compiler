@@ -7,10 +7,6 @@
 #include <string>
 #include <unistd.h>
 
-void trim(std::string &s) {
-  s.erase(s.begin(), std::find_if_not(s.begin(), s.end(),
-                                      [](const char &c) { return c == ' '; }));
-}
 std::list<std::string> lex(const std::string &filename) {
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
@@ -33,13 +29,13 @@ std::list<std::string> lex(const std::string &filename) {
 
   while (istr >> line) {
     while (line.size() > 0) {
-      bool found = false;
+      bool found = false; // Flag To Detect Illegal Expression
       std::string longestMatch;
-      long len = 0;
+      long len = 0; // Length of Longest Pattern Match
       for (unsigned int i = 0; i < patterns.size(); ++i) {
         if (std::regex_search(line, matches, patterns[i])) {
           long pos = matches.position(0);
-          if (pos == 0 && matches.length(pos) > len) {
+          if (pos == 0 && matches.length(pos) > len) { // Pattern needs to match starting from the first character to be valid
             longestMatch = matches.str(pos);
             len = matches.length(pos);
             found = true;

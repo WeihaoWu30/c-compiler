@@ -7,3 +7,4 @@ lexer.cpp~
 compile_commands.json
 bin/
 .cache/
+.vscode/

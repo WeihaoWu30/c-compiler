@@ -4,12 +4,15 @@
 #include <string>
 #include <iostream>
 
-uint32_t counter = 0;
+uint32_t counter = 0; // Assists in creating unique temporary variables
 
+// This function creates the name for a temporary variable
 TIdentifier* make_temporary() {
-    return new TIdentifier("tmp." + std::to_string(counter++));
+    std::string tmp_name("tmp." + std::to_string(counter++));
+    return new TIdentifier(tmp_name);
 }
 
+// This function converts from a AST operators to TACKY operators
 TUnary_Operator* convert_unop(Unary_Operator* exp) {
     Complement* complement = dynamic_cast<Complement*>(exp);
     Negate* negate = dynamic_cast<Negate*>(exp);
@@ -24,6 +27,7 @@ TUnary_Operator* convert_unop(Unary_Operator* exp) {
     return nullptr;
 }
 
+// This function is recursive and converts AST expressions to Tacky Values
 TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
     Constant* constant = dynamic_cast<Constant*>(e);
     Unary* unary = dynamic_cast<Unary*>(e);
@@ -36,12 +40,14 @@ TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
         TIdentifier* dst_name = make_temporary();
         TVar* dst = new TVar(dst_name);
         TUnary_Operator* unary_operator = convert_unop(unary->unary_operator);
-        instructions.push_back(new TUnary(unary_operator, src, dst));
+        TUnary *unary = new TUnary(unary_operator, src, dst);
+        instructions.push_back(unary);
         return dst;
     } 
     return nullptr;
 }
 
+// This function converts AST function to Tacky function
 TFunction* generate_function(Function* func) {
     Identifier* a_identifier = func->name;
     Return* ret = dynamic_cast<Return *>(func->body);
@@ -53,12 +59,12 @@ TFunction* generate_function(Function* func) {
     TIdentifier* t_identifier = new TIdentifier(a_identifier->name);
     
     std::vector<TInstruction*> instructions;
-    TVar* dst = dynamic_cast<TVar *>(emit_tacky(ret->exp, instructions));
-    TReturn* t_return = new TReturn(dst);
+    TReturn* t_return = new TReturn(emit_tacky(ret->exp, instructions));
     instructions.push_back(t_return);
     return new TFunction(t_identifier, instructions);
 }
 
+// This function converts AST program to Tacky program
 TProgram* generate_tacky(Program* program) {
     TFunction* function_definition = generate_function(program->func);
     TProgram* tacky = new TProgram(function_definition);
