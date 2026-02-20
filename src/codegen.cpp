@@ -70,13 +70,11 @@ std::list<Instruction *> generate_instructions(TFunction* func) {
 // This function converts the temporary variable to a offset from the base caller address within the stack frame
 Stack* replace_pseudo(Pseudo* pseudo) {
   std::string var(pseudo->identifier->name);
-  Stack* stack;
   if (!stack_offset.count(var)) { // Only Add New Locations Crreated
     total_bytes_to_reserve += 4;
-    stack = new Stack(-total_bytes_to_reserve);
-  } else {
-    stack = new Stack(-stack_offset[var]); 
-  }
+    stack_offset[var] = -total_bytes_to_reserve;
+  } 
+  Stack* stack = new Stack(stack_offset[var]); 
   return stack;
 }
 

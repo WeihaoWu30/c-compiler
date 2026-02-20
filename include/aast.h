@@ -68,7 +68,9 @@ public:
   Pseudo(AIdentifier* identifier_): identifier(identifier_){}
   ~Pseudo() { delete identifier; }
 protected:
-  void write(std::ostream &ostr) const override {};
+  void write(std::ostream &ostr) const override {
+    ostr << ""; // dummy use of output stream to avoid error
+  };
 };
 
 struct Stack : Operand {
@@ -159,9 +161,9 @@ public:
 
 protected:
   void write(std::ostream &ostr) const override { 
-    ostr << "movq\t%rbp, %rsp" << std::endl;
-    ostr << "popq\t%rbp" << std::endl;
-    ostr << name << std::endl; 
+    ostr << "\tmovq\t%rbp, %rsp" << std::endl;
+    ostr << "\tpopq\t%rbp" << std::endl;
+    ostr << "\t" << name << std::endl; 
   }
 };
 

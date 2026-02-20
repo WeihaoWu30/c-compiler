@@ -8,7 +8,8 @@ uint32_t counter = 0; // Assists in creating unique temporary variables
 
 // This function creates the name for a temporary variable
 TIdentifier* make_temporary() {
-    return new TIdentifier("tmp." + std::to_string(counter++));
+    std::string tmp_name("tmp." + std::to_string(counter++));
+    return new TIdentifier(tmp_name);
 }
 
 // This function converts from a AST operators to TACKY operators
@@ -39,7 +40,8 @@ TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
         TIdentifier* dst_name = make_temporary();
         TVar* dst = new TVar(dst_name);
         TUnary_Operator* unary_operator = convert_unop(unary->unary_operator);
-        instructions.push_back(new TUnary(unary_operator, src, dst));
+        TUnary *unary = new TUnary(unary_operator, src, dst);
+        instructions.push_back(unary);
         return dst;
     } 
     return nullptr;
@@ -57,8 +59,7 @@ TFunction* generate_function(Function* func) {
     TIdentifier* t_identifier = new TIdentifier(a_identifier->name);
     
     std::vector<TInstruction*> instructions;
-    TVar* dst = dynamic_cast<TVar *>(emit_tacky(ret->exp, instructions));
-    TReturn* t_return = new TReturn(dst);
+    TReturn* t_return = new TReturn(emit_tacky(ret->exp, instructions));
     instructions.push_back(t_return);
     return new TFunction(t_identifier, instructions);
 }

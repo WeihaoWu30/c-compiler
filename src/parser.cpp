@@ -105,6 +105,6 @@ Program *parse(std::list<std::string> &tokens)
 {
   Function *function_definition = parse_function(tokens);
   Program *program = new Program(function_definition);
-  pretty_print(program);
+  // pretty_print(program);
   return program;
 }

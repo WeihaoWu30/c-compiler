@@ -1,6 +1,6 @@
 # Makefile to run the compiler under x86_64 architecture
 
-.PHONY: term setup clean compile run
+.PHONY: term setup clean compile
 
 term:
 	@arch -x86_64 /bin/zsh

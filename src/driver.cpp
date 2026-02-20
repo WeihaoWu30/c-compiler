@@ -50,7 +50,6 @@ void cleanup() {
 
 // This function converts Assembly File To Binary Executable
 void execute(const char *filename) {
-	std::cout << filename << std::endl;
   if (!fork()) {
     execlp("gcc", "gcc", AF, "-o", filename, (char *)nullptr);
     _exit(1);

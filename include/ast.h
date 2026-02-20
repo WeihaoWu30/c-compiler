@@ -7,25 +7,19 @@ struct Unary_Operator {
 public:
   virtual ~Unary_Operator() = default;
 protected:
-  virtual void print(std::ostream &ostr) const = 0;
+  std::string symbol;
   friend std::ostream &operator<<(std::ostream&ostr, const Unary_Operator &unary_operator) {
-    unary_operator.print(ostr);
+    ostr << "Unary Operator(" << unary_operator.symbol << ")";
     return ostr;
   }
 };
 
 struct Complement : Unary_Operator {
-protected:
-  void print(std::ostream &ostr) const override {
-    ostr << "Unary Operator(" << "~" << ")";
-  }
+  Complement() { symbol = "~"; }
 };
 
 struct Negate : Unary_Operator {
-protected:
-  void print(std::ostream &ostr) const override {
-    ostr << "Unary Operator(" << "-" << ")";
-  }
+  Negate() { symbol = "-"; }
 };
 
 struct Expression {
@@ -61,8 +55,7 @@ struct Unary : Expression {
     delete exp;
   }
   void print(std::ostream &ostr) const override {
-    ostr << "Unary(" << *unary_operator << ", " << *exp << std::endl;
-    ostr << "\t\t\t)";
+    ostr << "Unary(" << *unary_operator << ", " << *exp << ")";
   }
 };
 
@@ -94,7 +87,7 @@ public:
 protected:
   void print(std::ostream &ostr) const override {
     ostr << "Return(" << std::endl;
-    ostr << "\t\t\t" << *exp;
+    ostr << "\t\t\t" << *exp << std::endl;
     ostr << "\t\t)";
   }
 };
