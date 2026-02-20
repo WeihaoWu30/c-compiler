@@ -4,10 +4,10 @@
 #include <string>
 #include <iostream>
 
-uint32_t COUNTER = 0;
+uint32_t counter = 0;
 
 TIdentifier* make_temporary() {
-    return new TIdentifier("tmp." + std::to_string(COUNTER++));
+    return new TIdentifier("tmp." + std::to_string(counter++));
 }
 
 TUnary_Operator* convert_unop(Unary_Operator* exp) {

@@ -7,7 +7,7 @@
 std::unordered_map<std::string, int> stack_offset;
 uint32_t total_bytes_to_reserve = 0;
 
-Operand *generate_operand(TVal* t_val) {
+Operand *generate_operand(TVal *&t_val) {
   TConstant *t_constant = dynamic_cast<TConstant *>(t_val);
   TVar *t_var = dynamic_cast<TVar *>(t_val);
   if(t_constant) {
@@ -27,10 +27,11 @@ AUnary_Operator *generate_operators(TUnary_Operator *unary_operator) {
    if (t_complement){
       Not* not_operator = new Not();
       return not_operator;
-   }else if (t_negate){
+   } else if (t_negate){
       Neg* neg_operator = new Neg();
       return neg_operator;
    }
+   return nullptr;
 }
 
 std::list<Instruction *> generate_instructions(TFunction* func) {
@@ -81,9 +82,10 @@ void compiler_pass(std::list<Instruction *>& instructions) {
       if(mov) {
         Pseudo *src = dynamic_cast<Pseudo *>(mov->src);
         Pseudo *dst = dynamic_cast<Pseudo *>(mov->dst);
+        Stack *src_stack, *dst_stack;
         if (src && dst) {
-          Stack* src_stack = replace_pseudo(src);
-          Stack *dst_stack = replace_pseudo(dst);
+          src_stack = replace_pseudo(src);
+          dst_stack = replace_pseudo(dst);
           
           R10 *r10_1 = new R10(), *r10_2 = new R10();
           Reg *register_1 = new Reg(r10_1), *register_2 = new Reg(r10_2);
@@ -93,16 +95,15 @@ void compiler_pass(std::list<Instruction *>& instructions) {
           mov->src = register_2;
           delete mov->dst;
           mov->dst = dst_stack;
-
           it = instructions.insert(it, new_mov);
         } else if (src) {
-          Stack* stack = replace_pseudo(src);
+          Stack *src_stack = replace_pseudo(src);
           delete mov->src;
-          mov->src = stack;
+          mov->src = src_stack;
         } else if (dst) {
-          Stack* stack = replace_pseudo(dst);
+          Stack *dst_stack = replace_pseudo(dst);
           delete mov->dst;
-          mov->dst = stack;
+          mov->dst = dst_stack;
         }
       } else if(unary) {
         Pseudo *dst = dynamic_cast<Pseudo *>(unary->operand);
