@@ -17,15 +17,6 @@ protected:
   }
 };
 
-struct Imm : Operand {
-public:
-  int val;
-  Imm(int val_) : val(val_) {}
-
-protected:
-  void write(std::ostream &ostr) const override { ostr << "$" << val; }
-};
-
 struct RegType {
 public:
   virtual ~RegType() = default;
@@ -37,11 +28,83 @@ protected:
   }
 };
 
+struct AInstruction {
+public:
+  virtual ~AInstruction() = default;
+
+protected:
+  virtual void write(std::ostream &ostr) const = 0;
+  friend std::ostream &operator<<(std::ostream &ostr,
+                                   const AInstruction &opr) {
+    opr.write(ostr);
+    return ostr;
+  }
+};
+
+struct AUnary_Operator {
+public:
+  virtual ~AUnary_Operator() = default;
+protected:
+  std::string instruction;
+  friend std::ostream &operator<<(std::ostream &ostr, const AUnary_Operator& unary_operator) {
+    ostr << unary_operator.instruction;
+    return ostr;
+  }
+};
+
+struct ABinary_Operator {
+public:
+  virtual ~ABinary_Operator() = default;
+protected:
+  std::string instruction;
+  friend std::ostream &operator<<(std::ostream &ostr, const ABinary_Operator& binary_operator) {
+    ostr << binary_operator.instruction;
+    return ostr;
+  }
+};
+
+struct AIdentifier {
+  std::string name;
+  AIdentifier(std::string &name_) : name(name_) {}
+  friend std::ostream &operator<<(std::ostream &ostr,
+                                   const Identifier &identifier);
+};
+
+struct AAdd : ABinary_Operator {
+  AAdd() { instruction = "addl"; }
+};
+
+struct ASub : ABinary_Operator {
+  ASub() { instruction = "subl"; }
+};
+
+struct AMult : ABinary_Operator {
+  AMult() { instruction = "imull"; }
+};
+
+struct Imm : Operand {
+public:
+  int val;
+  Imm(int val_) : val(val_) {}
+
+protected:
+  void write(std::ostream &ostr) const override { ostr << "$" << val; }
+};
+
 struct AX : RegType {
   AX() { name = "%eax"; }
 };
+
 struct R10 : RegType {
   R10() { name = "%r10d"; }
+};
+
+struct DX: RegType {
+  DX() { name = "%edx"; }
+};
+
+struct R11: RegType {
+  R11() { name = "%r11d"; }
 };
 
 struct Reg : Operand {
@@ -53,13 +116,6 @@ protected:
   void write(std::ostream &ostr) const override { 
     ostr << *reg;
   }
-};
-
-struct AIdentifier {
-  std::string name;
-  AIdentifier(std::string &name_) : name(name_) {}
-  friend std::ostream &operator<<(std::ostream &ostr,
-                                   const Identifier &identifier);
 };
 
 struct Pseudo : Operand {
@@ -83,20 +139,7 @@ protected:
   }
 };
 
-struct Instruction {
-public:
-  virtual ~Instruction() = default;
-
-protected:
-  virtual void write(std::ostream &ostr) const = 0;
-  friend std::ostream &operator<<(std::ostream &ostr,
-                                   const Instruction &opr) {
-    opr.write(ostr);
-    return ostr;
-  }
-};
-
-struct Mov : Instruction {
+struct Mov : AInstruction {
 public:
   Operand *src, *dst;
   Mov(Operand *src_, Operand *dst_) : src(src_), dst(dst_) {}
@@ -111,17 +154,6 @@ protected:
   }
 };
 
-struct AUnary_Operator {
-public:
-  virtual ~AUnary_Operator() = default;
-protected:
-  std::string instruction;
-  friend std::ostream &operator<<(std::ostream &ostr, const AUnary_Operator& unary_operator) {
-    ostr << unary_operator.instruction;
-    return ostr;
-  }
-};
-
 struct Neg: AUnary_Operator{
   Neg() { instruction = "negl"; }
 };
@@ -129,7 +161,7 @@ struct Not: AUnary_Operator{
   Not() { instruction = "notl"; }
 };
 
-struct AUnary : Instruction {
+struct AUnary : AInstruction {
 public:
    AUnary_Operator *unary_operator;
    Operand* operand;
@@ -144,7 +176,40 @@ protected:
   }
 };
 
-struct AllocateStack : Instruction {
+struct ABinary : AInstruction {
+public:
+  ABinary_Operator *binary_operator;
+  Operand *operand1, *operand2;
+  ABinary(ABinary_Operator *binary_operator_, Operand *operand1_, Operand *operand2_): binary_operator(binary_operator_), operand1(operand1_), operand2(operand2_) {}
+  ~ABinary() {
+    delete binary_operator;
+    delete operand1;
+    delete operand2;
+  }
+protected:
+  void write(std::ostream &ostr) const override {
+    ostr << "";
+  }
+};
+
+struct AIdiv : AInstruction {
+public:
+  Operand *operand;
+  AIdiv(Operand *operand_): operand(operand_) {}
+protected:
+  void write(std::ostream &ostr) const override {
+    ostr << "";
+  }
+};
+
+struct ACdq : AInstruction {
+protected:
+  void write(std::ostream &ostr) const override {
+    ostr << "cdq" << std::endl;
+  }
+};
+
+struct AllocateStack : AInstruction {
 public:
    int bytes;
    AllocateStack(int bytes_): bytes(bytes_){}
@@ -154,7 +219,7 @@ protected:
   }
 };
 
-struct Ret : Instruction {
+struct Ret : AInstruction {
 public:
   std::string name;
   Ret() { name = "ret"; }
@@ -169,12 +234,12 @@ protected:
 
 struct AFunction {
   AIdentifier *name;
-  std::list<Instruction *> instructions;
-  AFunction(AIdentifier *name_, std::list<Instruction *> &instructions_)
+  std::list<AInstruction *> instructions;
+  AFunction(AIdentifier *name_, std::list<AInstruction *> &instructions_)
       : name(name_), instructions(instructions_) {}
   ~AFunction() {
     delete name;
-    for (Instruction *instr : instructions) {
+    for (AInstruction *instr : instructions) {
       delete instr;
     }
   }

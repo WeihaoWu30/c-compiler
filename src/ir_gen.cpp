@@ -9,6 +9,7 @@ uint32_t counter = 0; // Assists in creating unique temporary variables
 // Prototyping
 TIdentifier* make_temporary();
 TUnary_Operator* convert_unop(Unary_Operator* exp);
+TBinary_Operator* convert_binop(Binary_Operator *op);
 TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions);
 TFunction* generate_function(Function* func);
 TProgram* generate_tacky(Program* program);
@@ -19,8 +20,8 @@ TIdentifier* make_temporary() {
     return new TIdentifier(tmp_name);
 }
 
-// This function converts from a AST operators to TACKY operators
-TUnary_Operator* convert_unop(Unary_Operator* exp) {
+// This function converts from a AST Unary operator to TACKY unary operator
+TUnary_Operator* convert_unop(Unary_Operator *exp) {
     Complement* complement = dynamic_cast<Complement*>(exp);
     Negate* negate = dynamic_cast<Negate*>(exp);
     if (complement){
@@ -34,23 +35,55 @@ TUnary_Operator* convert_unop(Unary_Operator* exp) {
     return nullptr;
 }
 
+// This function converts from a AST binary operator to TACKY operator
+TBinary_Operator* convert_binop(Binary_Operator *op) {
+    TBinary_Operator *res = nullptr;
+    Add *add = dynamic_cast<Add *>(op);
+    Subtract *subtract = dynamic_cast<Subtract *>(op);
+    Multiply *multiply = dynamic_cast<Multiply *>(op);
+    Divide *divide = dynamic_cast<Divide *>(op);
+    Remainder *remainder = dynamic_cast<Remainder *>(op);
+    
+    if(add) {
+        res = new TAdd();
+    } else if(subtract) {
+        res = new TSubtract();
+    } else if(multiply) {
+        res = new TMultiply();
+    } else if(divide) {
+        res = new TDivide();
+    } else if(remainder) {
+        res = new TRemainder();
+    }
+    return res;
+}
+
 // This function is recursive and converts AST expressions to Tacky Values
 TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
-    Constant* constant = dynamic_cast<Constant*>(e);
-    Unary* unary = dynamic_cast<Unary*>(e);
+    Constant *constant = dynamic_cast<Constant *>(e);
+    Unary *unary = dynamic_cast<Unary *>(e);
+    Binary *binary = dynamic_cast<Binary *>(e);
     if (constant) {
         TConstant* t_constant = new TConstant(constant->val);
         return t_constant;
     }
     else if(unary) {
-        TVal* src = emit_tacky(unary->exp, instructions);
-        TIdentifier* dst_name = make_temporary();
-        TVar* dst = new TVar(dst_name);
-        TUnary_Operator* unary_operator = convert_unop(unary->unary_operator);
+        TVal *src = emit_tacky(unary->exp, instructions);
+        TIdentifier *dst_name = make_temporary();
+        TVar *dst = new TVar(dst_name);
+        TUnary_Operator *unary_operator = convert_unop(unary->unary_operator);
         TUnary *unary = new TUnary(unary_operator, src, dst);
         instructions.push_back(unary);
         return dst;
-    } 
+    } else if(binary) {
+        TVal* src1 = emit_tacky(binary->left, instructions);
+        TVal* src2 = emit_tacky(binary->right, instructions);
+        TIdentifier *dst_name = make_temporary();
+        TVar *dst = new TVar(dst_name);
+        TBinary_Operator *binary_operator = convert_binop(binary->binary_operator);
+        TBinary *binary = new TBinary(binary_operator, src1, src2, dst);
+        instructions.push_back(binary);
+    }
     return nullptr;
 }
 
