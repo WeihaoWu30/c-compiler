@@ -32,6 +32,8 @@ struct TComplement : TUnary_Operator {};
 
 struct TNegate : TUnary_Operator {};
 
+struct TNot : TUnary_Operator {};
+
 struct TAdd : TBinary_Operator {};
 
 struct TSubtract : TBinary_Operator {};
@@ -41,6 +43,18 @@ struct TMultiply : TBinary_Operator {};
 struct TDivide : TBinary_Operator {};
 
 struct TRemainder : TBinary_Operator {};
+
+struct TEqual : TBinary_Operator {};
+
+struct TNotEqual : TBinary_Operator {};
+
+struct TLessThan : TBinary_Operator {};
+
+struct TLessOrEqual : TBinary_Operator {};
+
+struct TGreaterThan : TBinary_Operator {};
+
+struct TGreaterOrEqual : TBinary_Operator {};
 
 struct TConstant : TVal {
     int val;
@@ -83,6 +97,51 @@ struct TBinary : TInstruction {
         delete src2;
         delete dst;
     }
+};
+
+struct TCopy : TInstruction {
+   TVal *src, *dst;
+   TCopy(TVal *src_, TVal *&dst_) : src(src_), dst(src_) {}
+   ~TCopy(){
+      delete src;
+      delete dst;
+   }
+};
+
+struct TJump : TInstruction {
+   TIdentifier *target;
+   TJump(TIdentifier* target_): target(target_) {}
+   ~TJump() {
+      delete target;
+   }
+};
+
+struct TJumpIfZero : TInstruction {
+   TVal *condition;
+   TIdentifier *target;
+   TJumpIfZero(TVal *condition_, TIdentifier *target_) : condition(condition_), target(target_) {}
+   ~TJumpIfZero(){
+      delete condition;
+      delete target;
+   }
+};
+
+struct TJumpIfNotZero : TInstruction{
+   TVal *condition;
+   TIdentifier *target;
+   TJumpIfNotZero(TVal *condition_, TIdentifier *target_) : condition(condition_), target(target_) {}
+   ~TJumpIfNotZero(){
+      delete condition;
+      delete target;
+   }
+};
+
+struct TLabel : TInstruction{
+   TIdentifier *identifier;
+   TLabel(TIdentifier *identifer_) : identifier(identifer_) {}
+   ~TLabel() {
+      delete identifier;
+   }
 };
 
 struct TFunction

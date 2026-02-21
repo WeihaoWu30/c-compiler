@@ -28,7 +28,7 @@ std::ostream &operator<<(std::ostream &ostr, const AFunction &function) {
   ostr << "\t" << "movq\t%rsp, %rbp" << std::endl;
 
   Ret *return_instruction = nullptr; // return instruction has to come after popping off the stack frame
-  for (Instruction *instr : function.instructions) {
+  for (AInstruction *instr : function.instructions) {
     return_instruction = dynamic_cast<Ret *>(instr);
     if(return_instruction) continue;
     ostr << "\t" << *instr;

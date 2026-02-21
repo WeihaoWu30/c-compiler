@@ -21,7 +21,7 @@ Program *parse(std::list<std::string> &tokens);
 
 
 // For Parsing Expressions
-std::unordered_set<std::string> binary_operators({ "+", "-", "/", "%", "*" });
+std::unordered_set<std::string> binary_operators({ "+", "-", "/", "%", "*", "<", "<=", ">", ">=", "==", "!=", "&&", "||" });
 
 // This Function Matches A Token Against Legal Syntax
 void expect(std::string expected, std::list<std::string> &tokens)
@@ -49,6 +49,8 @@ Unary_Operator *parse_unop(std::list<std::string> &tokens)
     res = new Complement();
   } else if(next_token == "-") {
     res = new Negate();
+  } else if (next_token == "!") {
+    res = new Unary_Not();
   }
 
   return res;
@@ -69,6 +71,22 @@ Binary_Operator *parse_binop(std::list<std::string> &tokens) {
     res = new Multiply();
   } else if(next_token == "%") {
     res = new Remainder();
+  } else if(next_token == "<"){
+    res = new LessThan();
+  } else if(next_token == "<="){
+    res = new LessOrEqual();
+  } else if(next_token == ">"){
+    res = new GreaterThan();
+  } else if (next_token == ">="){
+    res = new GreaterOrEqual();
+  } else if (next_token == "=="){
+    res = new Equal();
+  } else if (next_token == "!="){
+    res = new NotEqual();
+  } else if (next_token == "&&"){
+    res = new And();
+  } else if (next_token == "||"){
+    res = new Or();
   }
 
   return res;
@@ -78,6 +96,10 @@ Binary_Operator *parse_binop(std::list<std::string> &tokens) {
 uint16_t precedence(const std::string& next_token) {
   if(next_token == "+" || next_token == "-") return 45;
   else if(next_token == "*" || next_token == "/" || next_token == "%") return 50;
+  else if (next_token == "<" || next_token == "<=" || next_token == ">" || next_token == ">=") return 35;
+  else if (next_token == "==" || next_token == "!=") return 30;
+  else if (next_token == "&&") return 10;
+  else if (next_token == "||") return 5;
   return 0;
 }
 
@@ -108,7 +130,7 @@ Expression *parse_factor(std::list<std::string> &tokens)
     tokens.erase(tokens.begin());
     return constant;
   }
-  else if (next_token == "~" || next_token == "-")
+  else if (next_token == "~" || next_token == "-" || next_token == "!")
   {
     Unary_Operator* unary_operator = parse_unop(tokens);
     Expression* inner_exp = parse_factor(tokens); // A Unary Expression Can contain another Unary Expression Whitin
