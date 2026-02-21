@@ -18,11 +18,29 @@ struct TUnary_Operator
    virtual ~TUnary_Operator() = default;
 };
 
+struct TBinary_Operator {
+    virtual ~TBinary_Operator() = default;
+};
+
 struct TIdentifier
 {
     std::string name;
     TIdentifier(std::string name_) : name(name_) {}
 };
+
+struct TComplement : TUnary_Operator {};
+
+struct TNegate : TUnary_Operator {};
+
+struct TAdd : TBinary_Operator {};
+
+struct TSubtract : TBinary_Operator {};
+
+struct TMultiply : TBinary_Operator {};
+
+struct TDivide : TBinary_Operator {};
+
+struct TRemainder : TBinary_Operator {};
 
 struct TConstant : TVal {
     int val;
@@ -47,8 +65,7 @@ struct TReturn : TInstruction
 struct TUnary : TInstruction
 {
     TUnary_Operator *unary_operator;
-    TVal *src;
-    TVal *dst;
+    TVal *src, *dst;
     TUnary(TUnary_Operator *unary_operator_, TVal *src_, TVal *dst_): unary_operator(unary_operator_), src(src_), dst(dst_) {}
     ~TUnary() {
         delete unary_operator;
@@ -56,9 +73,17 @@ struct TUnary : TInstruction
     }
 };
 
-struct TComplement : TUnary_Operator {};
-
-struct TNegate : TUnary_Operator {};
+struct TBinary : TInstruction {
+    TBinary_Operator *binary_operator;
+    TVal *src1, *src2, *dst;
+    TBinary(TBinary_Operator *binary_operator_, TVal *src1_, TVal *src2_, TVal *dst_): binary_operator(binary_operator_), src1(src1_), src2(src2_), dst(dst_) {} 
+    ~TBinary() {
+        delete binary_operator;
+        delete src1;
+        delete src2;
+        delete dst;
+    }
+};
 
 struct TFunction
 {

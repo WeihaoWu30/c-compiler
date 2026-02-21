@@ -7,6 +7,7 @@ extern uint32_t counter;
 
 TIdentifier* make_temporary();
 TUnary_Operator* convert_unop(Unary_Operator* exp);
+TBinary_Operator* convert_binop(Binary_Operator *op);
 TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions);
 TFunction* generate_function(Function* func);
 TProgram* generate_tacky(Program* program);
