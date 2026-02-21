@@ -1,4 +1,4 @@
 int main(void) { 
-	return 100;
+	return 1 + 1;
 }
 

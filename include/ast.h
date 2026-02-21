@@ -22,6 +22,37 @@ struct Negate : Unary_Operator {
   Negate() { symbol = "-"; }
 };
 
+struct Binary_Operator {
+public:
+  virtual ~Binary_Operator() = default;
+protected:
+  std::string symbol;
+  friend std::ostream &operator<<(std::ostream&ostr, const Binary_Operator &binary_operator) {
+    ostr << binary_operator.symbol;
+    return ostr;
+  }
+};
+
+struct Add : Binary_Operator {
+  Add() { symbol = "+"; }
+};
+
+struct Subtract : Binary_Operator {
+  Subtract() { symbol = "-"; }
+};
+
+struct Multiply : Binary_Operator {
+  Multiply() { symbol = "*"; }
+};
+
+struct Divide : Binary_Operator {
+  Divide() { symbol = "/"; }
+};
+
+struct Remainder : Binary_Operator {
+  Remainder() { symbol = "%"; }
+};
+
 struct Expression {
 public:
   virtual ~Expression() = default;
@@ -46,6 +77,7 @@ protected:
 };
 
 struct Unary : Expression {
+public:
   Unary_Operator *unary_operator;
   Expression *exp;
   Unary(Unary_Operator *unary_operator_, Expression *exp_)
@@ -54,8 +86,25 @@ struct Unary : Expression {
     delete unary_operator;
     delete exp;
   }
+protected:
   void print(std::ostream &ostr) const override {
     ostr << "Unary(" << *unary_operator << ", " << *exp << ")";
+  }
+};
+
+struct Binary : Expression {
+public:
+  Binary_Operator *binary_operator;
+  Expression *left, *right;
+  Binary(Binary_Operator *binary_operator_, Expression *left_, Expression *right_): binary_operator(binary_operator_), left(left_), right(right_) {}
+  ~Binary() {
+    delete binary_operator;
+    delete left;
+    delete right;
+  }
+  protected:
+  void print(std::ostream &ostr) const override {
+    ostr << "Binary Operator(" << *binary_operator << ", " << *left << ", " << *right;
   }
 };
 

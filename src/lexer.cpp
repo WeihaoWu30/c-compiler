@@ -7,6 +7,9 @@
 #include <string>
 #include <unistd.h>
 
+// Prototyping
+std::list<std::string> lex(const std::string &filename);
+
 std::list<std::string> lex(const std::string &filename) {
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
@@ -20,7 +23,11 @@ std::list<std::string> lex(const std::string &filename) {
                                       std::regex(";"),
                                       std::regex("--"),
                                       std::regex("-"),
-                                      std::regex("~")};
+                                      std::regex("~"),
+                                      std::regex("\\+"),
+                                      std::regex("\\*"),
+                                      std::regex("/"),
+                                      std::regex("\\%")};
 
   std::string line;
   std::smatch matches;
