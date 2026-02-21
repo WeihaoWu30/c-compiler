@@ -188,7 +188,7 @@ public:
   }
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << "";
+    ostr << *binary_operator << "\t" << *operand1 << ", " << *operand2 << std::endl;
   }
 };
 
@@ -198,7 +198,7 @@ public:
   AIdiv(Operand *operand_): operand(operand_) {}
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << "";
+    ostr << "idivl" << "\t" << *operand << std::endl;
   }
 };
 
