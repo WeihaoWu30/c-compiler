@@ -3,8 +3,25 @@
 #include <iostream>
 #include <list>
 #include <string>
+#include <unordered_set>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
+
+// Prototyping
+void expect(std::string expected, std::list<std::string> &tokens);
+Unary_Operator *parse_unop(std::list<std::string> &tokens);
+Binary_Operator *parse_binop(std::list<std::string> &tokens);
+uint16_t precedence(const std::string& next_token);
+Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec);
+Expression *parse_factor(std::list<std::string> &tokens);
+Return *parse_statement(std::list<std::string> &tokens);
+Function *parse_function(std::list<std::string> &tokens);
+void pretty_print(const Program *p);
+Program *parse(std::list<std::string> &tokens);
+
+
+// For Parsing Expressions
+std::unordered_set<std::string> binary_operators({ "+", "-", "/", "%", "*" });
 
 // This Function Matches A Token Against Legal Syntax
 void expect(std::string expected, std::list<std::string> &tokens)
@@ -27,16 +44,59 @@ Unary_Operator *parse_unop(std::list<std::string> &tokens)
 {
   std::string next_token(*tokens.begin());
   tokens.erase(tokens.begin());
+  Unary_Operator *res = nullptr;
   if (next_token == "~"){
-    Complement* complement = new Complement();
-    return complement;
+    res = new Complement();
+  } else if(next_token == "-") {
+    res = new Negate();
   }
-  Negate* negate = new Negate();
-  return negate;
+
+  return res;
+}
+
+// This function creates AST nodes for binary operators
+Binary_Operator *parse_binop(std::list<std::string> &tokens) {
+  std::string next_token(*tokens.begin());
+  tokens.erase(tokens.begin());
+  Binary_Operator *res = nullptr;
+  if(next_token == "+") {
+    res = new Add();
+  } else if(next_token == "-") {
+    res = new Subtract();
+  } else if(next_token == "/") {
+    res = new Divide();
+  } else if(next_token == "*") {
+    res = new Multiply();
+  } else if(next_token == "%") {
+    res = new Remainder();
+  }
+
+  return res;
+}
+
+// This function hard codes each symbol's precedence values
+uint16_t precedence(const std::string& next_token) {
+  if(next_token == "+" || next_token == "-") return 45;
+  else if(next_token == "*" || next_token == "/" || next_token == "%") return 50;
+  return 0;
+}
+
+// This function groups up expressions and orders them by precedence to create a recursive branch of Binary AST nodes
+Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec) {
+  Expression *left = parse_factor(tokens);
+  std::string next_token(*tokens.begin());
+  while(binary_operators.count(next_token) && precedence(next_token) >= min_prec) { // Ensures that we process preceeding operators first
+    Binary_Operator *binary_operator = parse_binop(tokens);
+    Expression *right = parse_expression(tokens, precedence(next_token) + 1); // The +1 ensures we are grouping from the left side to the right side
+    left = new Binary(binary_operator, left, right);
+    next_token = *tokens.begin();
+  }
+
+  return left;
 }
 
 // This recursive function Establishes Expression Nodes
-Expression *parse_expression(std::list<std::string> &tokens)
+Expression *parse_factor(std::list<std::string> &tokens)
 {
   if (tokens.empty()) return nullptr; // REQUIRED BASE CASE
   std::string next_token(*tokens.begin());
@@ -51,13 +111,13 @@ Expression *parse_expression(std::list<std::string> &tokens)
   else if (next_token == "~" || next_token == "-")
   {
     Unary_Operator* unary_operator = parse_unop(tokens);
-    Expression* inner_exp = parse_expression(tokens); // A Unary Expression Can contain another Unary Expression Whitin
+    Expression* inner_exp = parse_factor(tokens); // A Unary Expression Can contain another Unary Expression Whitin
     Unary* unop = new Unary(unary_operator, inner_exp);
     return unop;
   }
   else if (next_token == "("){ // Separating Unary Operators
     tokens.erase(tokens.begin());
-    Expression* inner_exp = parse_expression(tokens); 
+    Expression* inner_exp = parse_expression(tokens, 0); 
     expect(")", tokens);
     return inner_exp;
   }
@@ -71,7 +131,7 @@ Expression *parse_expression(std::list<std::string> &tokens)
 Return *parse_statement(std::list<std::string> &tokens)
 {
   expect("return", tokens);
-  Expression *return_val = parse_expression(tokens);
+  Expression *return_val = parse_expression(tokens, 0);
   expect(";", tokens);
   Return *ret = new Return(return_val);
   return ret;

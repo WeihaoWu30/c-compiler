@@ -1,9 +1,15 @@
 #include <iostream>
 #include "ast.h"
 
+// Forward Declaration
 struct Program;
 struct Function;
 struct Identifier;
+
+// Prototyping
+std::ostream &operator<<(std::ostream &ostr, const Program &program);
+std::ostream &operator<<(std::ostream &ostr, const Function &function);
+std::ostream &operator<<(std::ostream &ostr, const Identifier &identifier);
 
 std::ostream &operator<<(std::ostream &ostr, const Program &program) {
   ostr << "Program(" << std::endl;

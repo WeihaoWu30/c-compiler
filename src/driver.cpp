@@ -16,6 +16,13 @@
 #define PPF "preprocessed.i"
 #define AF "assembly.s"
 
+// Prototyping
+void preprocess(char *filename);
+void destroy(Program *&program, AProgram *&assembly_program, TProgram *&tacky_program);
+void cleanup();
+void execute(const char *filename);
+int main(int argc, char *argv[]);
+
 /*
 This function calls the GCC driver to remove comments and trims whitespace in the C file provided.
 This makes it easier for the compiler to parse and lex the C file.

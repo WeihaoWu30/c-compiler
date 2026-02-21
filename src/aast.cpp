@@ -1,9 +1,15 @@
 #include "aast.h"
 #include <iostream>
 
+// Forward Declaring
 struct AProgram;
 struct AFunction;
 struct AIdentifier;
+
+// Prototyping
+std::ostream &operator<<(std::ostream &ostr, const AProgram &program);
+std::ostream &operator<<(std::ostream &ostr, const AIdentifier &identifier);
+std::ostream &operator<<(std::ostream &ostr, const AFunction &function);
 
 std::ostream &operator<<(std::ostream &ostr, const AProgram &program) {
   ostr << *(program.function_definition) << std::endl;

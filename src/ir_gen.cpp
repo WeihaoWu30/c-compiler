@@ -6,6 +6,13 @@
 
 uint32_t counter = 0; // Assists in creating unique temporary variables
 
+// Prototyping
+TIdentifier* make_temporary();
+TUnary_Operator* convert_unop(Unary_Operator* exp);
+TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions);
+TFunction* generate_function(Function* func);
+TProgram* generate_tacky(Program* program);
+
 // This function creates the name for a temporary variable
 TIdentifier* make_temporary() {
     std::string tmp_name("tmp." + std::to_string(counter++));
