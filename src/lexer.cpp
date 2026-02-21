@@ -27,7 +27,16 @@ std::list<std::string> lex(const std::string &filename) {
                                       std::regex("\\+"),
                                       std::regex("\\*"),
                                       std::regex("/"),
-                                      std::regex("\\%")};
+                                      std::regex("\\%"),
+                                      std::regex("!="),
+                                      std::regex("!"),
+                                      std::regex("&&"),
+                                      std::regex("\\|\\|"),
+                                      std::regex("=="),
+                                      std::regex("<="),
+                                      std::regex(">="),
+                                      std::regex("<"),
+                                      std::regex(">")};
 
   std::string line;
   std::smatch matches;
