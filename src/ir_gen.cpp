@@ -20,10 +20,19 @@ TIdentifier* make_temporary() {
     return new TIdentifier(tmp_name);
 }
 
+TLabel* make_label(){
+
+}
+
+TConstant* convert_short_circuiting_ops(TVal* src1, TVal* src2){
+
+}
+
 // This function converts from a AST Unary operator to TACKY unary operator
 TUnary_Operator* convert_unop(Unary_Operator *exp) {
     Complement* complement = dynamic_cast<Complement*>(exp);
     Negate* negate = dynamic_cast<Negate*>(exp);
+    Unary_Not* not_op = dynamic_cast<Unary_Not*>(exp);
     if (complement){
         TComplement* t_complement = new TComplement();
         return t_complement;
@@ -31,6 +40,9 @@ TUnary_Operator* convert_unop(Unary_Operator *exp) {
     else if(negate) {
         TNegate* t_negate = new TNegate();
         return t_negate;
+    } else if(not_op){
+      TNot* t_not = new TNot();
+      return t_not;
     } else {
         return nullptr;
     }
@@ -44,6 +56,15 @@ TBinary_Operator* convert_binop(Binary_Operator *op) {
     Multiply *multiply = dynamic_cast<Multiply *>(op);
     Divide *divide = dynamic_cast<Divide *>(op);
     Remainder *remainder = dynamic_cast<Remainder *>(op);
+    Equal *equal = dynamic_cast<Equal *>(op);
+    NotEqual *not_equal = dynamic_cast<NotEqual *>(op);
+    LessThan *less_than = dynamic_cast<LessThan *>(op);
+    LessOrEqual *less_or_equal = dynamic_cast<LessOrEqual *>(op);
+    GreaterThan *greater_than = dynamic_cast<GreaterThan *>(op);
+    GreaterOrEqual *greater_or_equal = dynamic_cast<GreaterOrEqual *>(op);
+    And* and_op = dynamic_cast<And *>(op);
+    Or* or_op = dynamic_cast<Or *>(op);
+
     
     if(add) {
         res = new TAdd();
@@ -55,6 +76,22 @@ TBinary_Operator* convert_binop(Binary_Operator *op) {
         res = new TDivide();
     } else if(remainder) {
         res = new TRemainder();
+    } else if(equal){
+       res = new TEqual();
+    } else if (not_equal){
+       res = new TNotEqual();
+    } else if (less_than){
+       res = new TLessThan();
+    } else if (less_or_equal){
+       res = new TLessOrEqual();
+    } else if (greater_than){
+       res = new TGreaterOrEqual();
+    } else if (greater_or_equal){
+       res = new TGreaterOrEqual();
+    } else if (and_op){
+
+    } else if (or_op){
+
     }
     return res;
 }
@@ -82,10 +119,34 @@ TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
         TIdentifier *dst_name = make_temporary();
         TVar *dst = new TVar(dst_name);
         TBinary_Operator *binary_operator = convert_binop(binary->binary_operator);
-        TBinary *t_binary = new TBinary(binary_operator, src1, src2, dst);
-        instructions.push_back(t_binary);
-        return dst;
-    } 
+
+        And* and_op = dynamic_cast<And *>(binary->binary_operator);
+        Or* or_op = dynamic_cast<Or *>(binary->binary_operator);
+        if (and_op){
+         TConstant* result;
+         if (!src1){
+            TConstant* short_circuit = new TConstant(0);
+            TIdentifier* false_label = make_temporary();   //will need to edit function to make labels that are easy to differentiate from the tmps
+            TJumpIfZero* jump_if_zero = new TJumpIfZero(src1, false_label);
+            TCopy* copy = new TCopy(short_circuit, result);
+            if (!src2){
+               TConstant* short_circuit = new TConstant(0);
+               TIdentifier* false_label = make_temporary();   //will need to edit function to make labels that are easy to differentiate from the tmps
+               TJumpIfZero* jump_if_zero = new TJumpIfZero(src2, false_label);
+               TCopy* copy = new TCopy(short_circuit, result);
+            } else{
+               TConstant* result = new TConstant(0);
+               TBinary *binary = new TBinary(binary_operator, src1, src2, result);
+               instructions.push_back(binary);
+            }
+         }
+        } else if (or_op){
+
+        }else{
+         TBinary *binary = new TBinary(binary_operator, src1, src2, dst);
+         instructions.push_back(binary);
+        }
+    }
     return nullptr;
 }
 
