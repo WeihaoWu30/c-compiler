@@ -31,7 +31,7 @@ namespace tacky
   {
   };
 
-  struct Lesshan : Binary_Operator
+  struct LessThan : Binary_Operator
   {
   };
 
@@ -39,7 +39,7 @@ namespace tacky
   {
   };
 
-  struct Greaterhan : Binary_Operator
+  struct GreaterThan : Binary_Operator
   {
   };
 

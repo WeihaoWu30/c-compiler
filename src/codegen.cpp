@@ -1,329 +1,381 @@
-#include "aast.h"
-#include "tacky.h"
-#include <iostream>
+#include "aast/aast.hpp"
+#include "tacky/tacky.hpp"
+#include "compiler/codegen.hpp"
+#include <ostream>
 #include <list>
 #include <unordered_map>
 
-std::unordered_map<std::string, int> stack_offset; // unique rbp jumps
-uint32_t total_bytes_to_reserve = 0; // total bytes to allocate to Stack Frame
+namespace codegen
+{
+  std::unordered_map<std::string, int> stack_offset; // unique rbp jumps
+  uint32_t total_bytes_to_reserve = 0;               // total bytes to allocate to aast::Stack Frame
 
-// Prototyping
-Operand *generate_operand(TVal *&t_val);
-AUnary_Operator* generate_unary_operators(TUnary_Operator *unary_operator);
-ABinary_Operator* generate_basic_binary_operators(TBinary_Operator *binary_operator);
-void generate_return(TReturn *t_return, std::list<AInstruction *> &assembly_instructions);
-void generate_unary(TUnary *t_unary, std::list<AInstruction *> &assembly_instructions);
-void generate_bin_basic(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions);
-void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions);
-std::list<AInstruction *> generate_instructions(TFunction* func);
-Stack* replace_pseudo(Pseudo* pseudo);
-void fix_mov(Mov *&mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void fix_unary(AUnary *&unary);
-void fix_add_sub(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void fix_mult(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void fix_div(AIdiv *&idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void compiler_pass(std::list<AInstruction *>& instructions);
-AProgram *generate_top_level(TProgram *&tacky_program);
-
-// This function converts Tacky Values To Immediate Values and Temporary Variables
-Operand *generate_operand(TVal *&t_val) {
-  TConstant *t_constant = dynamic_cast<TConstant *>(t_val);
-  TVar *t_var = dynamic_cast<TVar *>(t_val);
-  if(t_constant) {
-    Imm *immediate_value = new Imm(t_constant->val);
-    return immediate_value;
-  } else if(t_var) {
-    AIdentifier *assembly_identifier = new AIdentifier(t_var->identifier->name);
-    Pseudo *pseudo_identifier = new Pseudo(assembly_identifier);
-    return pseudo_identifier;
-  } 
-  return nullptr;
-}
-
-// This function converts Tacky unary operators to Assembly instructions for unary operators
-AUnary_Operator* generate_unary_operators(TUnary_Operator *unary_operator) {
-   TComplement *t_complement = dynamic_cast<TComplement *>(unary_operator);
-   TNegate *t_negate = dynamic_cast<TNegate *>(unary_operator);
-   AUnary_Operator *res = nullptr;
-   if (t_complement) {
-      res = new Not();
-   } else if (t_negate){
-      res = new Neg();
-   }
-   return res;
-}
-
-// This function converts from TACKY to Assembly Instructions for Binary Operators +, -, *
-ABinary_Operator* generate_basic_binary_operators(TBinary_Operator *binary_operator) {
-  TAdd *t_add = dynamic_cast<TAdd *>(binary_operator);
-  TSubtract *t_sub = dynamic_cast<TSubtract *>(binary_operator);
-  TMultiply *t_mult = dynamic_cast<TMultiply *>(binary_operator);
-  ABinary_Operator *res = nullptr;
-  if(t_add) {
-    res = new AAdd();
-  } else if(t_sub) {
-    res = new ASub();
-  } else if(t_mult) {
-    res = new AMult();
+  // tacky::his function converts tacky::acky Values tacky::o aast::Immediate Values and tacky::emporary Variables
+  aast::Operand *generate_operand(tacky::Val *&t_val)
+  {
+    tacky::Constant *t_constant = dynamic_cast<tacky::Constant *>(t_val);
+    tacky::Var *t_var = dynamic_cast<tacky::Var *>(t_val);
+    if (t_constant)
+    {
+      aast::Imm *immediate_value = new aast::Imm(t_constant->val);
+      return immediate_value;
+    }
+    else if (t_var)
+    {
+      aast::Identifier *assembly_identifier = new aast::Identifier(t_var->identifier->name);
+      aast::Pseudo *pseudo_identifier = new aast::Pseudo(assembly_identifier);
+      return pseudo_identifier;
+    }
+    return nullptr;
   }
 
-  return res;
-}
-
-// This function creates the Assembly Return Instruction
-void generate_return(TReturn *t_return, std::list<AInstruction *> &assembly_instructions) {
-  Operand *val = generate_operand(t_return->val);
-  AX *ax_register = new AX();
-  Reg *reg = new Reg(ax_register);
-  Mov *move = new Mov(val, reg);
-  assembly_instructions.push_back(move);
-
-  Ret *ret = new Ret();
-  assembly_instructions.push_back(ret);
-}
-
-// This function creates the Assembly Instruction for Tacky Unary Operators
-void generate_unary(TUnary *t_unary, std::list<AInstruction *> &assembly_instructions) {
-  Operand *src = generate_operand(t_unary->src);
-  Operand *dst = generate_operand(t_unary->dst);
-  Mov *mov = new Mov(src, dst);
-  assembly_instructions.push_back(mov);
-
-  Operand *operand = generate_operand(t_unary->dst); // This is required to avoid dangling pointer later
-  AUnary_Operator *unary_operator = generate_unary_operators(t_unary->unary_operator);
-  AUnary *unary = new AUnary(unary_operator, operand);
-  assembly_instructions.push_back(unary);
-}
-
-// This function creates the Assembly Instruction for Tacky Binary Operators +, -, *
-void generate_bin_basic(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions) {
-  Operand *mov_src = generate_operand(t_binary->src1);
-  Operand *mov_dst = generate_operand(t_binary->dst);
-  Mov *mov = new Mov(mov_src, mov_dst);
-  assembly_instructions.push_back(mov);
-
-  Operand *bin_src = generate_operand(t_binary->src2);
-  Operand *bin_dst = generate_operand(t_binary->dst);
-  ABinary_Operator *bin_op = generate_basic_binary_operators(t_binary->binary_operator);
-  ABinary *binary = new ABinary(bin_op, bin_src, bin_dst);
-  assembly_instructions.push_back(binary);
-}
-
-// This function creates the Assembly Instruction for Tacky Binary Operators /, %
-void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions) {
-  TDivide *div = dynamic_cast<TDivide *>(t_binary->binary_operator);
-  TRemainder *remainder = dynamic_cast<TRemainder *>(t_binary->binary_operator);
-
-  RegType *reg_type1 = new AX(), *reg_type2 = nullptr;
-  if(div) {
-    reg_type2 = new AX();  // quotient goes in eax
+  // tacky::his function converts tacky::acky unary operators to aast::ssembly instructions for unary operators
+  aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator *unary_operator)
+  {
+    tacky::Complement *t_complement = dynamic_cast<tacky::Complement *>(unary_operator);
+    tacky::Negate *t_negate = dynamic_cast<tacky::Negate *>(unary_operator);
+    aast::Unary_Operator *res = nullptr;
+    if (t_complement)
+    {
+      res = new aast::Not();
+    }
+    else if (t_negate)
+    {
+      res = new aast::Neg();
+    }
+    return res;
   }
-  else if(remainder) {
-    reg_type2 = new DX(); // remainder goes int edx
+
+  // tacky::his function converts from tacky::aast::CKY to aast::ssembly Instructions for Binary Operators +, -, *
+  aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator *binary_operator)
+  {
+    tacky::Add *t_add = dynamic_cast<tacky::Add *>(binary_operator);
+    tacky::Subtract *t_sub = dynamic_cast<tacky::Subtract *>(binary_operator);
+    tacky::Multiply *t_mult = dynamic_cast<tacky::Multiply *>(binary_operator);
+    aast::Binary_Operator *res = nullptr;
+    if (t_add)
+    {
+      res = new aast::Add();
+    }
+    else if (t_sub)
+    {
+      res = new aast::Sub();
+    }
+    else if (t_mult)
+    {
+      res = new aast::Mult();
+    }
+
+    return res;
   }
-  Reg *mov1_reg = new Reg(reg_type1);
 
-  Operand *mov_src = generate_operand(t_binary->src1); // dividend
-  Mov *mov1 = new Mov(mov_src, mov1_reg);
-  assembly_instructions.push_back(mov1);
-  
-  ACdq *cdq = new ACdq(); // sign extension since idiv can only take in 64 bit values
-  assembly_instructions.push_back(cdq);
+  // tacky::his function creates the aast::ssembly Return Instruction
+  void generate_return(tacky::Return *t_return, std::list<aast::Instruction *> &assembly_instructions)
+  {
+    aast::Operand *val = generate_operand(t_return->val);
+    aast::AX *ax_register = new aast::AX();
+    aast::Reg *reg = new aast::Reg(ax_register);
+    aast::Mov *move = new aast::Mov(val, reg);
+    assembly_instructions.push_back(move);
 
-  Operand *div_src = generate_operand(t_binary->src2); // divisor
-  AIdiv *idiv = new AIdiv(div_src);
-  assembly_instructions.push_back(idiv);
+    aast::Ret *ret = new aast::Ret();
+    assembly_instructions.push_back(ret);
+  }
 
-  Reg *mov2_reg = new Reg(reg_type2);
-  Operand *mov_dst = generate_operand(t_binary->dst);
-  Mov *mov2 = new Mov(mov2_reg, mov_dst); // copy register value to address
-  assembly_instructions.push_back(mov2);
-}
+  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Unary Operators
+  void generate_unary(tacky::Unary *t_unary, std::list<aast::Instruction *> &assembly_instructions)
+  {
+    aast::Operand *src = generate_operand(t_unary->src);
+    aast::Operand *dst = generate_operand(t_unary->dst);
+    aast::Mov *mov = new aast::Mov(src, dst);
+    assembly_instructions.push_back(mov);
 
-// This function converts every Tacky Instruction to a set of assembly instructions
-std::list<AInstruction *> generate_instructions(TFunction* func) {
-  std::list<AInstruction *> assembly_instructions;
-  for(TInstruction *&instruction: func->body) {
-    TReturn *t_return = dynamic_cast<TReturn *>(instruction);
-    TUnary *t_unary = dynamic_cast<TUnary *>(instruction);
-    TBinary *t_binary = dynamic_cast<TBinary *>(instruction);
-    if(t_return) {
-      generate_return(t_return, assembly_instructions);
-    } else if(t_unary) {
-      generate_unary(t_unary, assembly_instructions);
-    } else if(t_binary) {
-      TAdd *add = dynamic_cast<TAdd *>(t_binary->binary_operator);
-      TSubtract *sub = dynamic_cast<TSubtract *>(t_binary->binary_operator);
-      TMultiply *mult = dynamic_cast<TMultiply *>(t_binary->binary_operator);
-      if(add || sub || mult) {
-        generate_bin_basic(t_binary, assembly_instructions);
-      } else {
-        generate_bin_div(t_binary, assembly_instructions);
+    aast::Operand *operand = generate_operand(t_unary->dst); // tacky::his is required to avoid dangling pointer later
+    aast::Unary_Operator *unary_operator = generate_unary_operators(t_unary->unary_operator);
+    aast::Unary *unary = new aast::Unary(unary_operator, operand);
+    assembly_instructions.push_back(unary);
+  }
+
+  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Binary Operators +, -, *
+  void generate_bin_basic(tacky::Binary *t_binary, std::list<aast::Instruction *> &assembly_instructions)
+  {
+    aast::Operand *mov_src = generate_operand(t_binary->src1);
+    aast::Operand *mov_dst = generate_operand(t_binary->dst);
+    aast::Mov *mov = new aast::Mov(mov_src, mov_dst);
+    assembly_instructions.push_back(mov);
+
+    aast::Operand *bin_src = generate_operand(t_binary->src2);
+    aast::Operand *bin_dst = generate_operand(t_binary->dst);
+    aast::Binary_Operator *bin_op = generate_basic_binary_operators(t_binary->binary_operator);
+    aast::Binary *binary = new aast::Binary(bin_op, bin_src, bin_dst);
+    assembly_instructions.push_back(binary);
+  }
+
+  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Binary Operators /, %
+  void generate_bin_div(tacky::Binary *t_binary, std::list<aast::Instruction *> &assembly_instructions)
+  {
+    tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator);
+    tacky::Remainder *remainder = dynamic_cast<tacky::Remainder *>(t_binary->binary_operator);
+
+    aast::RegType *reg_type1 = new aast::AX(), *reg_type2 = nullptr;
+    if (div)
+    {
+      reg_type2 = new aast::AX(); // quotient goes in eax
+    }
+    else if (remainder)
+    {
+      reg_type2 = new aast::DX(); // remainder goes int edx
+    }
+    aast::Reg *mov1_reg = new aast::Reg(reg_type1);
+
+    aast::Operand *mov_src = generate_operand(t_binary->src1); // dividend
+    aast::Mov *mov1 = new aast::Mov(mov_src, mov1_reg);
+    assembly_instructions.push_back(mov1);
+
+    aast::Cdq *cdq = new aast::Cdq(); // sign extension since idiv can only take in 64 bit values
+    assembly_instructions.push_back(cdq);
+
+    aast::Operand *div_src = generate_operand(t_binary->src2); // divisor
+    aast::Idiv *idiv = new aast::Idiv(div_src);
+    assembly_instructions.push_back(idiv);
+
+    aast::Reg *mov2_reg = new aast::Reg(reg_type2);
+    aast::Operand *mov_dst = generate_operand(t_binary->dst);
+    aast::Mov *mov2 = new aast::Mov(mov2_reg, mov_dst); // copy register value to address
+    assembly_instructions.push_back(mov2);
+  }
+
+  // tacky::his function converts every tacky::acky Instruction to a set of assembly instructions
+  std::list<aast::Instruction *> generate_instructions(tacky::Function *func)
+  {
+    std::list<aast::Instruction *> assembly_instructions;
+    for (tacky::Instruction *&instruction : func->body)
+    {
+      tacky::Return *t_return = dynamic_cast<tacky::Return *>(instruction);
+      tacky::Unary *t_unary = dynamic_cast<tacky::Unary *>(instruction);
+      tacky::Binary *t_binary = dynamic_cast<tacky::Binary *>(instruction);
+      if (t_return)
+      {
+        generate_return(t_return, assembly_instructions);
       }
+      else if (t_unary)
+      {
+        generate_unary(t_unary, assembly_instructions);
+      }
+      else if (t_binary)
+      {
+        tacky::Add *add = dynamic_cast<tacky::Add *>(t_binary->binary_operator);
+        tacky::Subtract *sub = dynamic_cast<tacky::Subtract *>(t_binary->binary_operator);
+        tacky::Multiply *mult = dynamic_cast<tacky::Multiply *>(t_binary->binary_operator);
+        if (add || sub || mult)
+        {
+          generate_bin_basic(t_binary, assembly_instructions);
+        }
+        else
+        {
+          generate_bin_div(t_binary, assembly_instructions);
+        }
+      }
+    }
+
+    return assembly_instructions;
+  }
+
+  // tacky::his function converts the temporary variable to a offset from the base caller address within the stack frame
+  aast::Stack *replace_pseudo(aast::Pseudo *pseudo)
+  {
+    std::string var(pseudo->identifier->name);
+    if (!stack_offset.count(var))
+    { // Only aast::dd New Locations Crreated
+      total_bytes_to_reserve += 4;
+      stack_offset[var] = -total_bytes_to_reserve;
+    }
+    aast::Stack *stack = new aast::Stack(stack_offset[var]);
+    return stack;
+  }
+
+  // tacky::his function assists in replacing pseudo variables for mov
+  void fix_mov(aast::Mov *&mov, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  {
+    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(mov->src);
+    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(mov->dst);
+    aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
+    if (src && dst)
+    { // separate into 2 instructions using r10d register
+      src_stack = replace_pseudo(src);
+      dst_stack = replace_pseudo(dst);
+
+      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
+      aast::Reg *register_1 = new aast::Reg(r10_1), *register_2 = new aast::Reg(r10_2);
+      aast::Mov *new_mov = new aast::Mov(src_stack, register_1); // copies src to register
+
+      delete mov->src;
+      mov->src = register_2; // replaces current temporary variable with register
+      delete mov->dst;
+      mov->dst = dst_stack;                  // new address
+      it = instructions.insert(it, new_mov); // Inserts before the current aast::Mov Instruction
+    }
+    else if (src)
+    {
+      src_stack = replace_pseudo(src);
+      delete mov->src;
+      mov->src = src_stack;
+    }
+    else if (dst)
+    {
+      dst_stack = replace_pseudo(dst);
+      delete mov->dst;
+      mov->dst = dst_stack;
     }
   }
 
-  return assembly_instructions;
-}
-
-// This function converts the temporary variable to a offset from the base caller address within the stack frame
-Stack* replace_pseudo(Pseudo* pseudo) {
-  std::string var(pseudo->identifier->name);
-  if (!stack_offset.count(var)) { // Only Add New Locations Crreated
-    total_bytes_to_reserve += 4;
-    stack_offset[var] = -total_bytes_to_reserve;
-  } 
-  Stack* stack = new Stack(stack_offset[var]); 
-  return stack;
-}
-
-// This function assists in replacing pseudo variables for mov
-void fix_mov(Mov *&mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
-  Pseudo *src = dynamic_cast<Pseudo *>(mov->src);
-  Pseudo *dst = dynamic_cast<Pseudo *>(mov->dst);
-  Stack *src_stack = nullptr, *dst_stack = nullptr;
-  if (src && dst) { // separate into 2 instructions using r10d register
-    src_stack = replace_pseudo(src);
-    dst_stack = replace_pseudo(dst);
-    
-    R10 *r10_1 = new R10(), *r10_2 = new R10();
-    Reg *register_1 = new Reg(r10_1), *register_2 = new Reg(r10_2);
-    Mov *new_mov = new Mov(src_stack, register_1); // copies src to register
-
-    delete mov->src;
-    mov->src = register_2; // replaces current temporary variable with register
-    delete mov->dst;
-    mov->dst = dst_stack; // new address
-    it = instructions.insert(it, new_mov); // Inserts before the current Mov Instruction
-  } else if (src) {
-    src_stack = replace_pseudo(src);
-    delete mov->src;
-    mov->src = src_stack;
-  } else if (dst) {
-    dst_stack = replace_pseudo(dst);
-    delete mov->dst;
-    mov->dst = dst_stack;
+  // tacky::his function assists in replacing pseudo variables for unary operators
+  void fix_unary(aast::Unary *&unary)
+  {
+    aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(unary->operand);
+    if (operand)
+    {
+      aast::Stack *stack = replace_pseudo(operand);
+      delete unary->operand;
+      unary->operand = stack;
+    }
   }
-}
 
-// This function assists in replacing pseudo variables for unary operators
-void fix_unary(AUnary *&unary) {
-  Pseudo *operand = dynamic_cast<Pseudo *>(unary->operand);
-  if(operand) {
-    Stack* stack = replace_pseudo(operand);
-    delete unary->operand;
-    unary->operand = stack;
+  // tacky::his function assists in replacing pseudo variables for addiiton and subtraction operators
+  void fix_add_sub(aast::Binary *&binary, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  {
+    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
+    if (operand1 && operand2)
+    { // same as mov with 2 addresses
+      src_stack = replace_pseudo(operand1);
+      dst_stack = replace_pseudo(operand2);
+
+      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
+      aast::Reg *reg1 = new aast::Reg(r10_1), *reg2 = new aast::Reg(r10_2);
+      aast::Mov *mov = new aast::Mov(src_stack, reg1);
+
+      delete binary->operand1;
+      binary->operand1 = reg2;
+      delete binary->operand2;
+      binary->operand2 = dst_stack;
+      it = instructions.insert(it, mov);
+    }
+    else if (operand1)
+    {
+      src_stack = replace_pseudo(operand1);
+      delete binary->operand1;
+      binary->operand1 = src_stack;
+    }
+    else if (operand2)
+    {
+      dst_stack = replace_pseudo(operand2);
+      delete binary->operand2;
+      binary->operand2 = dst_stack;
+    }
   }
-}
 
-// This function assists in replacing pseudo variables for addiiton and subtraction operators
-void fix_add_sub(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
-  Pseudo *operand1 = dynamic_cast<Pseudo *>(binary->operand1);
-  Pseudo *operand2 = dynamic_cast<Pseudo *>(binary->operand2);
-  Stack *src_stack = nullptr, *dst_stack = nullptr;
-  if(operand1 && operand2) { // same as mov with 2 addresses
-    src_stack = replace_pseudo(operand1);
-    dst_stack = replace_pseudo(operand2);
+  // tacky::his function assists in replacing pseudo variables for multiplication operator
+  void fix_mult(aast::Binary *&binary, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  {
+    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Stack *mov1_stack = nullptr, *mov2_stack = nullptr;
+    if (src)
+    {
+      aast::Stack *src_stack = replace_pseudo(src);
+      delete binary->operand1;
+      binary->operand1 = src_stack;
+    }
+    if (dst)
+    {
+      mov1_stack = replace_pseudo(dst);
+      mov2_stack = replace_pseudo(dst);
 
-    R10 *r10_1 = new R10(), *r10_2 = new R10();
-    Reg *reg1 = new Reg(r10_1), *reg2 = new Reg(r10_2);
-    Mov *mov = new Mov(src_stack, reg1);
+      aast::R11 *r11_1 = new aast::R11(), *r11_2 = new aast::R11(), *r11_3 = new aast::R11();
+      aast::Reg *reg1 = new aast::Reg(r11_1), *reg2 = new aast::Reg(r11_2), *reg3 = new aast::Reg(r11_3);
+      aast::Mov *mov1 = new aast::Mov(mov1_stack, reg1); // copies address content into register
+      delete binary->operand2;
+      binary->operand2 = reg2; // multiplies constant by content in register
+      instructions.insert(it, mov1);
+      ++it;
 
-    delete binary->operand1;
-    binary->operand1 = reg2;
-    delete binary->operand2;
-    binary->operand2 = dst_stack;
-    it = instructions.insert(it, mov);
-  } else if(operand1) {
-    src_stack = replace_pseudo(operand1);
-    delete binary->operand1;
-    binary->operand1 = src_stack;
-  } else if(operand2) {
-    dst_stack = replace_pseudo(operand2);
-    delete binary->operand2;
-    binary->operand2 = dst_stack;
+      aast::Mov *mov2 = new aast::Mov(reg3, mov2_stack); // copies register content to the original address;
+      it = instructions.insert(it, mov2);
+    }
   }
-}
 
-// This function assists in replacing pseudo variables for multiplication operator
-void fix_mult(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
-  Pseudo *src = dynamic_cast<Pseudo *>(binary->operand1);
-  Pseudo *dst = dynamic_cast<Pseudo *>(binary->operand2);
-  Stack *mov1_stack = nullptr, *mov2_stack = nullptr;
-  if(src) {
-    Stack *src_stack = replace_pseudo(src);
-    delete binary->operand1;
-    binary->operand1 = src_stack;
+  // tacky::his function assists in replacing pseudo variables for division and modulo operator
+  void fix_div(aast::Idiv *&idiv, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  {
+    aast::Pseudo *pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand);
+    aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand);
+    if (pseudo)
+    {
+      aast::Stack *stack = replace_pseudo(pseudo);
+      delete idiv->operand;
+      idiv->operand = stack;
+    }
+    else if (imm_val)
+    {
+      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
+      aast::Reg *reg1 = new aast::Reg(r10_1), *reg2 = new aast::Reg(r10_2);
+      aast::Mov *mov = new aast::Mov(imm_val, reg1); // copies divisor into a register and then apply the division onto that register directly
+      // delete idiv->operand; aast::Mov Instruction uses its immediate value so we can't delete
+      idiv->operand = reg2;
+      it = instructions.insert(it, mov);
+    }
   }
-  if(dst) {
-    mov1_stack = replace_pseudo(dst);
-    mov2_stack = replace_pseudo(dst);
 
-    R11 *r11_1 = new R11(), *r11_2 = new R11(), *r11_3 = new R11();
-    Reg *reg1 = new Reg(r11_1), *reg2 = new Reg(r11_2), *reg3 = new Reg(r11_3);
-    Mov* mov1 = new Mov(mov1_stack, reg1); // copies address content into register
-    delete binary->operand2;
-    binary->operand2 = reg2; // multiplies constant by content in register
-    instructions.insert(it, mov1);
-    ++it;
-
-    Mov* mov2 = new Mov(reg3, mov2_stack); // copies register content to the original address;
-    it = instructions.insert(it, mov2);
-  }
-}
-
-// This function assists in replacing pseudo variables for division and modulo operator
-void fix_div(AIdiv *&idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
-  Pseudo *pseudo = dynamic_cast<Pseudo *>(idiv->operand);
-  Imm *imm_val = dynamic_cast<Imm *>(idiv->operand);
-  if(pseudo) {
-    Stack *stack = replace_pseudo(pseudo);
-    delete idiv->operand;
-    idiv->operand = stack;
-  } else if(imm_val) {
-    R10 *r10_1 = new R10(), *r10_2 = new R10();
-    Reg *reg1 = new Reg(r10_1), *reg2 = new Reg(r10_2);
-    Mov *mov = new Mov(imm_val, reg1); // copies divisor into a register and then apply the division onto that register directly
-    // delete idiv->operand; Mov Instruction uses its immediate value so we can't delete
-    idiv->operand = reg2;
-    it = instructions.insert(it, mov);
-  }
-}
-
-// This function converts every Temporary Variable (Pseudo) to a stack offset
-void compiler_pass(std::list<AInstruction *>& instructions) {
-  // All of the replacements follow the same steps: create Stack struct, delete Pseudo, replace with Stack struct
-   for(typename std::list<AInstruction *>::iterator it = instructions.begin();it != instructions.end();++it) {
-      Mov *mov = dynamic_cast<Mov *>(*it);
-      AUnary *unary = dynamic_cast<AUnary *>(*it);
-      ABinary *binary = dynamic_cast<ABinary *>(*it);
-      AIdiv *idiv = dynamic_cast<AIdiv *>(*it);
-      if(mov) {
+  // tacky::his function converts every tacky::emporary Variable (aast::Pseudo) to a stack offset
+  void compiler_pass(std::list<aast::Instruction *> &instructions)
+  {
+    // aast::ll of the replacements follow the same steps: create aast::Stack struct, delete aast::Pseudo, replace with aast::Stack struct
+    for (typename std::list<aast::Instruction *>::iterator it = instructions.begin(); it != instructions.end(); ++it)
+    {
+      aast::Mov *mov = dynamic_cast<aast::Mov *>(*it);
+      aast::Unary *unary = dynamic_cast<aast::Unary *>(*it);
+      aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
+      aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(*it);
+      if (mov)
+      {
         fix_mov(mov, it, instructions);
-      } else if(unary) {
+      }
+      else if (unary)
+      {
         fix_unary(unary);
-      } else if(binary) {
-        AMult *mult = dynamic_cast<AMult *>(binary->binary_operator);
-        if(mult) {
+      }
+      else if (binary)
+      {
+        aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
+        if (mult)
+        {
           fix_mult(binary, it, instructions);
-        } else {
+        }
+        else
+        {
           fix_add_sub(binary, it, instructions);
         }
-      } else if(idiv) {
+      }
+      else if (idiv)
+      {
         fix_div(idiv, it, instructions);
       }
-   }
+    }
 
-   AllocateStack *allocateStack = new AllocateStack(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
-   instructions.push_front(allocateStack);
-}
+    aast::AllocateStack *allocateStack = new aast::AllocateStack(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
+    instructions.push_front(allocateStack);
+  }
 
-// This function converts Tacky nodes to assembly AST nodes
-AProgram *generate_top_level(TProgram *&tacky_program) {
-   AIdentifier *identifier = new AIdentifier(tacky_program->func->identifier->name);
-   std::list<AInstruction *> instructions = generate_instructions(tacky_program->func);
-   compiler_pass(instructions); // Convert After We Allocate All Needed Temporary Variables
-   AFunction *function = new AFunction(identifier, instructions);
-   AProgram *program = new AProgram(function);
-   return program;
+  // tacky::his function converts tacky::acky nodes to assembly aast::aast::Stacky:: nodes
+  aast::Program *generate_top_level(tacky::Program *&tacky_program)
+  {
+    aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
+    std::list<aast::Instruction *> instructions = generate_instructions(tacky_program->func);
+    compiler_pass(instructions); // Convert aast::fter We aast::llocate aast::ll Needed tacky::emporary Variables
+    aast::Function *function = new aast::Function(identifier, instructions);
+    aast::Program *program = new aast::Program(function);
+    return program;
+  }
 }
