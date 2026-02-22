@@ -31,8 +31,9 @@ TUnary_Operator* convert_unop(Unary_Operator *exp) {
     else if(negate) {
         TNegate* t_negate = new TNegate();
         return t_negate;
+    } else {
+        return nullptr;
     }
-    return nullptr;
 }
 
 // This function converts from a AST binary operator to TACKY operator
@@ -81,9 +82,10 @@ TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
         TIdentifier *dst_name = make_temporary();
         TVar *dst = new TVar(dst_name);
         TBinary_Operator *binary_operator = convert_binop(binary->binary_operator);
-        TBinary *binary = new TBinary(binary_operator, src1, src2, dst);
-        instructions.push_back(binary);
-    }
+        TBinary *t_binary = new TBinary(binary_operator, src1, src2, dst);
+        instructions.push_back(t_binary);
+        return dst;
+    } 
     return nullptr;
 }
 

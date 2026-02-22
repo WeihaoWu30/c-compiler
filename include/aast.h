@@ -125,7 +125,7 @@ public:
   ~Pseudo() { delete identifier; }
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << ""; // dummy use of output stream to avoid error
+    ostr << ""; // Preventing Errors when compiling since this isn't being read as an assembly line
   };
 };
 
@@ -188,7 +188,7 @@ public:
   }
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << "";
+    ostr << *binary_operator << "\t" << *operand1 << ", " << *operand2 << std::endl;
   }
 };
 
@@ -196,9 +196,10 @@ struct AIdiv : AInstruction {
 public:
   Operand *operand;
   AIdiv(Operand *operand_): operand(operand_) {}
+  ~AIdiv() { delete operand; }
 protected:
   void write(std::ostream &ostr) const override {
-    ostr << "";
+    ostr << "idivl" << "\t" << *operand << std::endl;
   }
 };
 

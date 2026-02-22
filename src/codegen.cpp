@@ -17,11 +17,11 @@ void generate_bin_basic(TBinary *t_binary, std::list<AInstruction *> &assembly_i
 void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions);
 std::list<AInstruction *> generate_instructions(TFunction* func);
 Stack* replace_pseudo(Pseudo* pseudo);
-void fix_mov(Mov *mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
+void fix_mov(Mov *&mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void fix_unary(AUnary *&unary);
 void fix_add_sub(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void fix_mult(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void fix_div(AIdiv *idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
+void fix_div(AIdiv *&idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void compiler_pass(std::list<AInstruction *>& instructions);
 AProgram *generate_top_level(TProgram *&tacky_program);
 
@@ -114,10 +114,14 @@ void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_ins
   TDivide *div = dynamic_cast<TDivide *>(t_binary->binary_operator);
   TRemainder *remainder = dynamic_cast<TRemainder *>(t_binary->binary_operator);
 
-  RegType *reg_type = nullptr;
-  if(div) reg_type = new AX(); // quotient goes in eax
-  else if(remainder) reg_type = new DX(); // remainder goes int edx
-  Reg *mov1_reg = new Reg(reg_type);
+  RegType *reg_type1 = new AX(), *reg_type2 = nullptr;
+  if(div) {
+    reg_type2 = new AX();  // quotient goes in eax
+  }
+  else if(remainder) {
+    reg_type2 = new DX(); // remainder goes int edx
+  }
+  Reg *mov1_reg = new Reg(reg_type1);
 
   Operand *mov_src = generate_operand(t_binary->src1); // dividend
   Mov *mov1 = new Mov(mov_src, mov1_reg);
@@ -130,7 +134,7 @@ void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_ins
   AIdiv *idiv = new AIdiv(div_src);
   assembly_instructions.push_back(idiv);
 
-  Reg *mov2_reg = new Reg(reg_type);
+  Reg *mov2_reg = new Reg(reg_type2);
   Operand *mov_dst = generate_operand(t_binary->dst);
   Mov *mov2 = new Mov(mov2_reg, mov_dst); // copy register value to address
   assembly_instructions.push_back(mov2);
@@ -174,7 +178,7 @@ Stack* replace_pseudo(Pseudo* pseudo) {
 }
 
 // This function assists in replacing pseudo variables for mov
-void fix_mov(Mov *mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
+void fix_mov(Mov *&mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
   Pseudo *src = dynamic_cast<Pseudo *>(mov->src);
   Pseudo *dst = dynamic_cast<Pseudo *>(mov->dst);
   Stack *src_stack = nullptr, *dst_stack = nullptr;
@@ -260,17 +264,16 @@ void fix_mult(ABinary *&binary, typename std::list<AInstruction *>::iterator& it
     Mov* mov1 = new Mov(mov1_stack, reg1); // copies address content into register
     delete binary->operand2;
     binary->operand2 = reg2; // multiplies constant by content in register
-    it = instructions.insert(it, mov1);
+    instructions.insert(it, mov1);
     ++it;
 
     Mov* mov2 = new Mov(reg3, mov2_stack); // copies register content to the original address;
     it = instructions.insert(it, mov2);
-    --it;
   }
 }
 
 // This function assists in replacing pseudo variables for division and modulo operator
-void fix_div(AIdiv *idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
+void fix_div(AIdiv *&idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions) {
   Pseudo *pseudo = dynamic_cast<Pseudo *>(idiv->operand);
   Imm *imm_val = dynamic_cast<Imm *>(idiv->operand);
   if(pseudo) {
@@ -281,7 +284,7 @@ void fix_div(AIdiv *idiv, typename std::list<AInstruction *>::iterator& it, std:
     R10 *r10_1 = new R10(), *r10_2 = new R10();
     Reg *reg1 = new Reg(r10_1), *reg2 = new Reg(r10_2);
     Mov *mov = new Mov(imm_val, reg1); // copies divisor into a register and then apply the division onto that register directly
-    delete idiv->operand;
+    // delete idiv->operand; Mov Instruction uses its immediate value so we can't delete
     idiv->operand = reg2;
     it = instructions.insert(it, mov);
   }

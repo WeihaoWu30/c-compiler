@@ -16,11 +16,11 @@ void generate_bin_basic(TBinary *t_binary, std::list<AInstruction *> &assembly_i
 void generate_bin_div(TBinary *t_binary, std::list<AInstruction *> &assembly_instructions);
 std::list<AInstruction *> generate_instructions(TFunction* func);
 Stack* replace_pseudo(Pseudo* pseudo);
-void fix_mov(Mov *mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
+void fix_mov(Mov *&mov, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void fix_unary(AUnary *&unary);
 void fix_add_sub(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void fix_mult(ABinary *&binary, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
-void fix_div(AIdiv *idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
+void fix_div(AIdiv *&idiv, typename std::list<AInstruction *>::iterator& it, std::list<AInstruction *>& instructions);
 void compiler_pass(std::list<AInstruction *>& instructions);
 AProgram *generate_top_level(TProgram *&tacky_program);
 #endif // !__CODEGEN_H__
