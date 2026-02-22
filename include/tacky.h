@@ -84,6 +84,12 @@ struct TUnary : TInstruction
     ~TUnary() {
         delete unary_operator;
         delete src; 
+        // delete dst; 
+        /*
+        The return struct contains the final dst variable so we only need to 
+        delete sources since it will clear each dst for us in the upcoming
+        instructions starting from the first instruction
+        */
     }
 };
 
@@ -95,7 +101,7 @@ struct TBinary : TInstruction {
         delete binary_operator;
         delete src1;
         delete src2;
-        delete dst;
+        // delete dst; Same reasoning as TUnary
     }
 };
 

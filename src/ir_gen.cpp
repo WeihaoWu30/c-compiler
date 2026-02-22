@@ -43,8 +43,9 @@ TUnary_Operator* convert_unop(Unary_Operator *exp) {
     } else if(not_op){
       TNot* t_not = new TNot();
       return t_not;
+    } else {
+        return nullptr;
     }
-    return nullptr;
 }
 
 // This function converts from a AST binary operator to TACKY operator
