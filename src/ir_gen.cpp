@@ -143,8 +143,9 @@ TVal* emit_tacky(Expression* e, std::vector<TInstruction*>& instructions) {
         } else if (or_op){
 
         }else{
-         TBinary *binary = new TBinary(binary_operator, src1, src2, dst);
-         instructions.push_back(binary);
+            TBinary *binary = new TBinary(binary_operator, src1, src2, dst);
+            instructions.push_back(binary);
+            return dst;
         }
     }
     return nullptr;
