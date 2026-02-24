@@ -1,0 +1,9 @@
+#pragma once
+#include "tacky/instructions/binary.hpp"
+#include "tacky/instructions/copy.hpp"
+#include "tacky/instructions/jump.hpp"
+#include "tacky/instructions/jump_if_zero.hpp"
+#include "tacky/instructions/jump_if_not_zero.hpp"
+#include "tacky/instructions/label.hpp"
+#include "tacky/instructions/return.hpp"
+#include "tacky/instructions/unary.hpp"
