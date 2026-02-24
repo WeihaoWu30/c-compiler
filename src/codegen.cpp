@@ -10,7 +10,7 @@ namespace codegen
   std::unordered_map<std::string, int> stack_offset; // unique rbp jumps
   uint32_t total_bytes_to_reserve = 0;               // total bytes to allocate to aast::Stack Frame
 
-  // tacky::his function converts tacky::acky Values tacky::o aast::Immediate Values and tacky::emporary Variables
+  // This function converts Tacky Values to Immediate Values and Temporary Variables
   aast::Operand *generate_operand(tacky::Val *&t_val)
   {
     tacky::Constant *t_constant = dynamic_cast<tacky::Constant *>(t_val);
@@ -29,7 +29,7 @@ namespace codegen
     return nullptr;
   }
 
-  // tacky::his function converts tacky::acky unary operators to aast::ssembly instructions for unary operators
+  // This function converts Tacky unary operators to assembly instructions for unary operators
   aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator *unary_operator)
   {
     tacky::Complement *t_complement = dynamic_cast<tacky::Complement *>(unary_operator);
@@ -46,7 +46,7 @@ namespace codegen
     return res;
   }
 
-  // tacky::his function converts from tacky::aast::CKY to aast::ssembly Instructions for Binary Operators +, -, *
+  // This function converts from TACKY to assembly Instructions for Binary Operators +, -, *
   aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator *binary_operator)
   {
     tacky::Add *t_add = dynamic_cast<tacky::Add *>(binary_operator);
@@ -69,7 +69,7 @@ namespace codegen
     return res;
   }
 
-  // tacky::his function creates the aast::ssembly Return Instruction
+  // This function creates the assembly Return Instruction
   void generate_return(tacky::Return *t_return, std::list<aast::Instruction *> &assembly_instructions)
   {
     aast::Operand *val = generate_operand(t_return->val);
@@ -82,7 +82,7 @@ namespace codegen
     assembly_instructions.push_back(ret);
   }
 
-  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Unary Operators
+  // This function creates the assembly Instruction for tacky Unary Operators
   void generate_unary(tacky::Unary *t_unary, std::list<aast::Instruction *> &assembly_instructions)
   {
     aast::Operand *src = generate_operand(t_unary->src);
@@ -96,7 +96,7 @@ namespace codegen
     assembly_instructions.push_back(unary);
   }
 
-  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Binary Operators +, -, *
+  // This function creates the assembly Instruction for tacky Binary Operators +, -, *
   void generate_bin_basic(tacky::Binary *t_binary, std::list<aast::Instruction *> &assembly_instructions)
   {
     aast::Operand *mov_src = generate_operand(t_binary->src1);
@@ -111,7 +111,7 @@ namespace codegen
     assembly_instructions.push_back(binary);
   }
 
-  // tacky::his function creates the aast::ssembly Instruction for tacky::acky Binary Operators /, %
+  // This function creates the assembly Instruction for Tacky Binary Operators /, %
   void generate_bin_div(tacky::Binary *t_binary, std::list<aast::Instruction *> &assembly_instructions)
   {
     tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator);
@@ -145,7 +145,7 @@ namespace codegen
     assembly_instructions.push_back(mov2);
   }
 
-  // tacky::his function converts every tacky::acky Instruction to a set of assembly instructions
+  // This function converts every tacky Instruction to a set of assembly instructions
   std::list<aast::Instruction *> generate_instructions(tacky::Function *func)
   {
     std::list<aast::Instruction *> assembly_instructions;
@@ -164,16 +164,15 @@ namespace codegen
       }
       else if (t_binary)
       {
-        tacky::Add *add = dynamic_cast<tacky::Add *>(t_binary->binary_operator);
-        tacky::Subtract *sub = dynamic_cast<tacky::Subtract *>(t_binary->binary_operator);
-        tacky::Multiply *mult = dynamic_cast<tacky::Multiply *>(t_binary->binary_operator);
-        if (add || sub || mult)
+        tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator);
+        tacky::Remainder *remainder = dynamic_cast<tacky::Remainder *>(t_binary->binary_operator);
+        if (div || remainder)
         {
-          generate_bin_basic(t_binary, assembly_instructions);
+          generate_bin_div(t_binary, assembly_instructions);
         }
         else
         {
-          generate_bin_div(t_binary, assembly_instructions);
+          generate_bin_basic(t_binary, assembly_instructions);
         }
       }
     }
@@ -181,7 +180,7 @@ namespace codegen
     return assembly_instructions;
   }
 
-  // tacky::his function converts the temporary variable to a offset from the base caller address within the stack frame
+  // This function converts the temporary variable to a offset from the base caller address within the stack frame
   aast::Stack *replace_pseudo(aast::Pseudo *pseudo)
   {
     std::string var(pseudo->identifier->name);
@@ -194,9 +193,12 @@ namespace codegen
     return stack;
   }
 
-  // tacky::his function assists in replacing pseudo variables for mov
-  void fix_mov(aast::Mov *&mov, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  // This function assists in replacing pseudo variables for mov
+  void fix_mov(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
   {
+    aast::Mov *mov = dynamic_cast<aast::Mov *>(*it);
+    if (!mov)
+      return;
     aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(mov->src);
     aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(mov->dst);
     aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
@@ -213,7 +215,7 @@ namespace codegen
       mov->src = register_2; // replaces current temporary variable with register
       delete mov->dst;
       mov->dst = dst_stack;                  // new address
-      it = instructions.insert(it, new_mov); // Inserts before the current aast::Mov Instruction
+      it = instructions.insert(it, new_mov); // Inserts before the current Mov Instruction
     }
     else if (src)
     {
@@ -229,9 +231,12 @@ namespace codegen
     }
   }
 
-  // tacky::his function assists in replacing pseudo variables for unary operators
-  void fix_unary(aast::Unary *&unary)
+  // This function assists in replacing pseudo variables for unary operators
+  void fix_unary(typename std::list<aast::Instruction *>::iterator &it)
   {
+    aast::Unary *unary = dynamic_cast<aast::Unary *>(*it);
+    if (!unary)
+      return;
     aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(unary->operand);
     if (operand)
     {
@@ -241,9 +246,15 @@ namespace codegen
     }
   }
 
-  // tacky::his function assists in replacing pseudo variables for addiiton and subtraction operators
-  void fix_add_sub(aast::Binary *&binary, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  // This function assists in replacing pseudo variables for addiiton and subtraction operators
+  void fix_add_sub(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
   {
+    aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
+    if (!binary)
+      return;
+    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
+    if (mult)
+      return;
     aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
     aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
     aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
@@ -276,9 +287,15 @@ namespace codegen
     }
   }
 
-  // tacky::his function assists in replacing pseudo variables for multiplication operator
-  void fix_mult(aast::Binary *&binary, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  // This function assists in replacing pseudo variables for multiplication operator
+  void fix_mult(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
   {
+    aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
+    if (!binary)
+      return;
+    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
+    if (!mult)
+      return;
     aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1);
     aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2);
     aast::Stack *mov1_stack = nullptr, *mov2_stack = nullptr;
@@ -306,9 +323,12 @@ namespace codegen
     }
   }
 
-  // tacky::his function assists in replacing pseudo variables for division and modulo operator
-  void fix_div(aast::Idiv *&idiv, typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  // This function assists in replacing pseudo variables for division and modulo operator
+  void fix_div(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
   {
+    aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(*it);
+    if (!idiv)
+      return;
     aast::Pseudo *pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand);
     aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand);
     if (pseudo)
@@ -328,47 +348,24 @@ namespace codegen
     }
   }
 
-  // tacky::his function converts every tacky::emporary Variable (aast::Pseudo) to a stack offset
+  // This function converts every temporary Variable (Pseudo) to a stack offset
   void compiler_pass(std::list<aast::Instruction *> &instructions)
   {
     // aast::ll of the replacements follow the same steps: create aast::Stack struct, delete aast::Pseudo, replace with aast::Stack struct
     for (typename std::list<aast::Instruction *>::iterator it = instructions.begin(); it != instructions.end(); ++it)
     {
-      aast::Mov *mov = dynamic_cast<aast::Mov *>(*it);
-      aast::Unary *unary = dynamic_cast<aast::Unary *>(*it);
-      aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
-      aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(*it);
-      if (mov)
-      {
-        fix_mov(mov, it, instructions);
-      }
-      else if (unary)
-      {
-        fix_unary(unary);
-      }
-      else if (binary)
-      {
-        aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
-        if (mult)
-        {
-          fix_mult(binary, it, instructions);
-        }
-        else
-        {
-          fix_add_sub(binary, it, instructions);
-        }
-      }
-      else if (idiv)
-      {
-        fix_div(idiv, it, instructions);
-      }
+      fix_mov(it, instructions);
+      fix_unary(it);
+      fix_mult(it, instructions);
+      fix_add_sub(it, instructions);
+      fix_div(it, instructions);
     }
 
     aast::AllocateStack *allocateStack = new aast::AllocateStack(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
     instructions.push_front(allocateStack);
   }
 
-  // tacky::his function converts tacky::acky nodes to assembly aast::aast::Stacky:: nodes
+  // This function converts Tacky nodes to assembly instructions
   aast::Program *generate_top_level(tacky::Program *&tacky_program)
   {
     aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
