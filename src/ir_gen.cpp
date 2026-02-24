@@ -7,21 +7,13 @@
 
 namespace ir_gen
 {
-    uint32_t counter = 0; // Assists in creating unique temporary variables
+    uint32_t id_counter = 0; // Assists in creating unique temporary variables
 
     // tacky::his function creates the name for a temporary variable
-    tacky::Identifier *make_temporary()
+    tacky::Identifier *make_identifier()
     {
-        std::string tmp_name("tmp." + std::to_string(counter++));
+        std::string tmp_name("tmp." + std::to_string(id_counter++));
         return new tacky::Identifier(tmp_name);
-    }
-
-    tacky::Label *make_label()
-    {
-    }
-
-    tacky::Constant *convert_short_circuiting_ops(tacky::Val *src1, tacky::Val *src2)
-    {
     }
 
     // tacky::his function converts from a AStacky:: Unary operator to tacky::ACKY unary operator
@@ -30,25 +22,21 @@ namespace ir_gen
         ast::Complement *complement = dynamic_cast<ast::Complement *>(exp);
         ast::Negate *negate = dynamic_cast<ast::Negate *>(exp);
         ast::Unary_Not *not_op = dynamic_cast<ast::Unary_Not *>(exp);
+        tacky::Unary_Operator *res = nullptr;
         if (complement)
         {
-            tacky::Complement *t_complement = new tacky::Complement();
-            return t_complement;
+            res = new tacky::Complement();
         }
         else if (negate)
         {
-            tacky::Negate *t_negate = new tacky::Negate();
-            return t_negate;
+            res = new tacky::Negate();
         }
         else if (not_op)
         {
-            tacky::Not *t_not = new tacky::Not();
-            return t_not;
+            res = new tacky::Not();
         }
-        else
-        {
-            return nullptr;
-        }
+
+        return res;
     }
 
     // tacky::his function converts from a AStacky:: binary operator to tacky::ACKY operator
@@ -66,8 +54,6 @@ namespace ir_gen
         ast::LessOrEqual *less_or_equal = dynamic_cast<ast::LessOrEqual *>(op);
         ast::GreaterThan *greater_than = dynamic_cast<ast::GreaterThan *>(op);
         ast::GreaterOrEqual *greater_or_equal = dynamic_cast<ast::GreaterOrEqual *>(op);
-        ast::And *and_op = dynamic_cast<ast::And *>(op);
-        ast::Or *or_op = dynamic_cast<ast::Or *>(op);
 
         if (add)
         {
@@ -113,12 +99,6 @@ namespace ir_gen
         {
             res = new tacky::GreaterOrEqual();
         }
-        else if (and_op)
-        {
-        }
-        else if (or_op)
-        {
-        }
         return res;
     }
 
@@ -136,56 +116,103 @@ namespace ir_gen
         else if (unary)
         {
             tacky::Val *src = emit_tacky(unary->exp, instructions);
-            tacky::Identifier *dst_name = make_temporary();
+            tacky::Identifier *dst_name = make_identifier();
             tacky::Var *dst = new tacky::Var(dst_name);
             tacky::Unary_Operator *unary_operator = convert_unop(unary->unary_operator);
             tacky::Unary *unary = new tacky::Unary(unary_operator, src, dst);
             instructions.push_back(unary);
             return dst;
         }
+        else if (binary && dynamic_cast<ast::And *>(binary->binary_operator))
+        {
+            tacky::Val *left = emit_tacky(binary->left, instructions);
+            tacky::Identifier *left_false_identifier = make_identifier();
+            tacky::JumpIfZero *left_jmp_if_zero = new tacky::JumpIfZero(left, left_false_identifier);
+            instructions.push_back(left_jmp_if_zero);
+
+            tacky::Val *right = emit_tacky(binary->right, instructions);
+            tacky::Identifier *right_false_identifier = new tacky::Identifier(left_false_identifier->name);
+            tacky::JumpIfZero *right_jmp_if_zero = new tacky::JumpIfZero(right, right_false_identifier);
+            instructions.push_back(right_jmp_if_zero);
+
+            tacky::Constant *const_one = new tacky::Constant(1);
+            tacky::Identifier *result_identifier_one = make_identifier();
+            tacky::Var *result_one = new tacky::Var(result_identifier_one);
+            tacky::Copy *copy_one = new tacky::Copy(const_one, result_one);
+            instructions.push_back(copy_one);
+
+            tacky::Identifier *end_jmp_identifier = make_identifier();
+            tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
+            instructions.push_back(end_jmp);
+
+            tacky::Identifier *false_identifier = new tacky::Identifier(right_false_identifier->name);
+            tacky::Label *false_label = new tacky::Label(false_identifier);
+            instructions.push_back(false_label);
+
+            tacky::Constant *const_zero = new tacky::Constant(0);
+            tacky::Identifier *result_identifier_zero = new tacky::Identifier(result_identifier_one->name);
+            tacky::Var *result_zero = new tacky::Var(result_identifier_zero);
+            tacky::Copy *copy_zero = new tacky::Copy(const_zero, result_zero);
+            instructions.push_back(copy_zero);
+
+            tacky::Identifier *end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
+            tacky::Label *end_label = new tacky::Label(end_label_identifier);
+            instructions.push_back(end_label);
+
+            tacky::Identifier *dst_name = make_identifier();
+            tacky::Var *dst = new tacky::Var(dst_name);
+            return dst;
+        }
+        else if (binary && dynamic_cast<ast::Or *>(binary->binary_operator))
+        {
+            tacky::Val *left = emit_tacky(binary->left, instructions);
+            tacky::Identifier *left_true_identifier = make_identifier();
+            tacky::JumpIfNotZero *left_jmp_if_not_zero = new tacky::JumpIfNotZero(left, left_true_identifier);
+            instructions.push_back(left_jmp_if_not_zero);
+
+            tacky::Val *right = emit_tacky(binary->right, instructions);
+            tacky::Identifier *right_true_identifier = new tacky::Identifier(left_true_identifier->name);
+            tacky::JumpIfNotZero *right_jmp_if_not_zero = new tacky::JumpIfNotZero(right, right_true_identifier);
+            instructions.push_back(right_jmp_if_not_zero);
+
+            tacky::Constant *const_zero = new tacky::Constant(0);
+            tacky::Identifier *result_identifier_zero = make_identifier();
+            tacky::Var *result_zero = new tacky::Var(result_identifier_zero);
+            tacky::Copy *copy_zero = new tacky::Copy(const_zero, result_zero);
+            instructions.push_back(copy_zero);
+
+            tacky::Identifier *end_jmp_identifier = make_identifier();
+            tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
+            instructions.push_back(end_jmp);
+
+            tacky::Identifier *true_identifier = new tacky::Identifier(right_true_identifier->name);
+            tacky::Label *true_label = new tacky::Label(true_identifier);
+            instructions.push_back(true_label);
+
+            tacky::Constant *const_one = new tacky::Constant(1);
+            tacky::Identifier *result_identifier_one = new tacky::Identifier(result_identifier_zero->name);
+            tacky::Var *result_one = new tacky::Var(result_identifier_one);
+            tacky::Copy *copy_one = new tacky::Copy(const_one, result_one);
+            instructions.push_back(copy_one);
+
+            tacky::Identifier *end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
+            tacky::Label *end_label = new tacky::Label(end_label_identifier);
+            instructions.push_back(end_label);
+
+            tacky::Identifier *dst_name = make_identifier();
+            tacky::Var *dst = new tacky::Var(dst_name);
+            return dst;
+        }
         else if (binary)
         {
             tacky::Val *src1 = emit_tacky(binary->left, instructions);
             tacky::Val *src2 = emit_tacky(binary->right, instructions);
-            tacky::Identifier *dst_name = make_temporary();
+            tacky::Identifier *dst_name = make_identifier();
             tacky::Var *dst = new tacky::Var(dst_name);
             tacky::Binary_Operator *binary_operator = convert_binop(binary->binary_operator);
-
-            ast::And *and_op = dynamic_cast<ast::And *>(binary->binary_operator);
-            ast::Or *or_op = dynamic_cast<ast::Or *>(binary->binary_operator);
-            if (and_op)
-            {
-                tacky::Constant *result;
-                if (!src1)
-                {
-                    tacky::Constant *short_circuit = new tacky::Constant(0);
-                    tacky::Identifier *false_label = make_temporary(); // will need to edit function to make labels that are easy to differentiate from the tmps
-                    tacky::JumpIfZero *jump_if_zero = new tacky::JumpIfZero(src1, false_label);
-                    tacky::Copy *copy = new tacky::Copy(short_circuit, result);
-                    if (!src2)
-                    {
-                        tacky::Constant *short_circuit = new tacky::Constant(0);
-                        tacky::Identifier *false_label = make_temporary(); // will need to edit function to make labels that are easy to differentiate from the tmps
-                        tacky::JumpIfZero *jump_if_zero = new tacky::JumpIfZero(src2, false_label);
-                        tacky::Copy *copy = new tacky::Copy(short_circuit, result);
-                    }
-                    else
-                    {
-                        tacky::Constant *result = new tacky::Constant(0);
-                        tacky::Binary *binary = new tacky::Binary(binary_operator, src1, src2, result);
-                        instructions.push_back(binary);
-                    }
-                }
-            }
-            else if (or_op)
-            {
-            }
-            else
-            {
-                tacky::Binary *binary = new tacky::Binary(binary_operator, src1, src2, dst);
-                instructions.push_back(binary);
-                return dst;
-            }
+            tacky::Binary *binary = new tacky::Binary(binary_operator, src1, src2, dst);
+            instructions.push_back(binary);
+            return dst;
         }
         return nullptr;
     }

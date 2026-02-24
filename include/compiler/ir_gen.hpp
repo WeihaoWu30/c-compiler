@@ -8,7 +8,7 @@
 namespace ir_gen
 {
   extern uint32_t counter;
-  tacky::Identifier *make_temporary();
+  tacky::Identifier *make_identifier();
   tacky::Unary_Operator *convert_unop(ast::Unary_Operator *exp);
   tacky::Binary_Operator *convert_binop(ast::Binary_Operator *op);
   tacky::Val *emit_tacky(ast::Expression *e, std::vector<tacky::Instruction *> &instructions);

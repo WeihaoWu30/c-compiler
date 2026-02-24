@@ -1,8 +1,10 @@
 #pragma once
 #include "aast/abstract/abstract.hpp"
 #include "aast/operators/operators.hpp"
-#include "aast/operands/stack.hpp"
+#include "aast/operands/operands.hpp"
+#include "aast/instructions/instructions.hpp"
 #include "tacky/abstract/abstract.hpp"
+#include "tacky/instructions/instructions.hpp"
 #include "tacky/top_level/top_level.hpp"
 #include <unordered_map>
 
