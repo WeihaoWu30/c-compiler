@@ -6,3 +6,8 @@
 #include "aast/instructions/mov.hpp"
 #include "aast/instructions/ret.hpp"
 #include "aast/instructions/unary.hpp"
+#include "aast/instructions/cmp.hpp"
+#include "aast/instructions/jmp.hpp"
+#include "aast/instructions/jmpcc.hpp"
+#include "aast/instructions/label.hpp"
+#include "aast/instructions/setcc.hpp"
