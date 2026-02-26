@@ -18,7 +18,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << *identifier << ":" << std::endl;
+      ostr << "L" << *identifier << ":" << std::endl;
     }
   };
 }

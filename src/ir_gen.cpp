@@ -7,16 +7,17 @@
 
 namespace ir_gen
 {
-    uint32_t id_counter = 0; // Assists in creating unique temporary variables
+    uint32_t id_counter = 0;    // Assists in creating unique temporary variables
+    uint32_t label_counter = 0; // Assists in creating unique Labels
 
-    // tacky::his function creates the name for a temporary variable
+    // This function creates the name for a temporary variable
     tacky::Identifier *make_identifier()
     {
         std::string tmp_name("tmp." + std::to_string(id_counter++));
         return new tacky::Identifier(tmp_name);
     }
 
-    // tacky::his function converts from a AStacky:: Unary operator to tacky::ACKY unary operator
+    // This function converts from a AST Unary operator to TACKY unary operator
     tacky::Unary_Operator *convert_unop(ast::Unary_Operator *exp)
     {
         ast::Complement *complement = dynamic_cast<ast::Complement *>(exp);
@@ -39,7 +40,7 @@ namespace ir_gen
         return res;
     }
 
-    // tacky::his function converts from a AStacky:: binary operator to tacky::ACKY operator
+    // This function converts from a AST binary operator to TACKY operator
     tacky::Binary_Operator *convert_binop(ast::Binary_Operator *op)
     {
         tacky::Binary_Operator *res = nullptr;
@@ -102,7 +103,7 @@ namespace ir_gen
         return res;
     }
 
-    // tacky::his function is recursive and converts AStacky:: expressions to tacky::acky Values
+    // This function is recursive and converts AST expressions to Tacky Values
     tacky::Val *emit_tacky(ast::Expression *e, std::vector<tacky::Instruction *> &instructions)
     {
         ast::Constant *constant = dynamic_cast<ast::Constant *>(e);
@@ -119,14 +120,14 @@ namespace ir_gen
             tacky::Identifier *dst_name = make_identifier();
             tacky::Var *dst = new tacky::Var(dst_name);
             tacky::Unary_Operator *unary_operator = convert_unop(unary->unary_operator);
-            tacky::Unary *unary = new tacky::Unary(unary_operator, src, dst);
-            instructions.push_back(unary);
+            tacky::Unary *new_unary = new tacky::Unary(unary_operator, src, dst);
+            instructions.push_back(new_unary);
             return dst;
         }
         else if (binary && dynamic_cast<ast::And *>(binary->binary_operator))
         {
             tacky::Val *left = emit_tacky(binary->left, instructions);
-            tacky::Identifier *left_false_identifier = make_identifier();
+            tacky::Identifier *left_false_identifier = new tacky::Identifier("false" + std::to_string(label_counter++));
             tacky::JumpIfZero *left_jmp_if_zero = new tacky::JumpIfZero(left, left_false_identifier);
             instructions.push_back(left_jmp_if_zero);
 
@@ -141,7 +142,7 @@ namespace ir_gen
             tacky::Copy *copy_one = new tacky::Copy(const_one, result_one);
             instructions.push_back(copy_one);
 
-            tacky::Identifier *end_jmp_identifier = make_identifier();
+            tacky::Identifier *end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
             tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
             instructions.push_back(end_jmp);
 
@@ -159,14 +160,14 @@ namespace ir_gen
             tacky::Label *end_label = new tacky::Label(end_label_identifier);
             instructions.push_back(end_label);
 
-            tacky::Identifier *dst_name = make_identifier();
+            tacky::Identifier *dst_name = new tacky::Identifier(result_identifier_zero->name);
             tacky::Var *dst = new tacky::Var(dst_name);
             return dst;
         }
         else if (binary && dynamic_cast<ast::Or *>(binary->binary_operator))
         {
             tacky::Val *left = emit_tacky(binary->left, instructions);
-            tacky::Identifier *left_true_identifier = make_identifier();
+            tacky::Identifier *left_true_identifier = new tacky::Identifier("true" + std::to_string(label_counter++));
             tacky::JumpIfNotZero *left_jmp_if_not_zero = new tacky::JumpIfNotZero(left, left_true_identifier);
             instructions.push_back(left_jmp_if_not_zero);
 
@@ -181,7 +182,7 @@ namespace ir_gen
             tacky::Copy *copy_zero = new tacky::Copy(const_zero, result_zero);
             instructions.push_back(copy_zero);
 
-            tacky::Identifier *end_jmp_identifier = make_identifier();
+            tacky::Identifier *end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
             tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
             instructions.push_back(end_jmp);
 
@@ -199,7 +200,7 @@ namespace ir_gen
             tacky::Label *end_label = new tacky::Label(end_label_identifier);
             instructions.push_back(end_label);
 
-            tacky::Identifier *dst_name = make_identifier();
+            tacky::Identifier *dst_name = new tacky::Identifier(result_identifier_one->name);
             tacky::Var *dst = new tacky::Var(dst_name);
             return dst;
         }
@@ -210,14 +211,14 @@ namespace ir_gen
             tacky::Identifier *dst_name = make_identifier();
             tacky::Var *dst = new tacky::Var(dst_name);
             tacky::Binary_Operator *binary_operator = convert_binop(binary->binary_operator);
-            tacky::Binary *binary = new tacky::Binary(binary_operator, src1, src2, dst);
-            instructions.push_back(binary);
+            tacky::Binary *new_binary = new tacky::Binary(binary_operator, src1, src2, dst);
+            instructions.push_back(new_binary);
             return dst;
         }
         return nullptr;
     }
 
-    // tacky::his function converts AStacky:: function to tacky::acky function
+    // This function converts AST function to Tacky function
     tacky::Function *generate_function(ast::Function *func)
     {
         ast::Identifier *a_identifier = func->name;
@@ -236,7 +237,7 @@ namespace ir_gen
         return new tacky::Function(t_identifier, instructions);
     }
 
-    // tacky::his function converts AStacky:: program to tacky::acky program
+    // This function converts AST program to Tacky program
     tacky::Program *generate_tacky(ast::Program *program)
     {
         tacky::Function *function_definition = generate_function(program->func);
