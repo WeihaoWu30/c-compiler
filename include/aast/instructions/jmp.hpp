@@ -18,7 +18,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "jmp\t" << *identifier << std::endl;
+      ostr << "jmp\tL" << *identifier << std::endl;
     }
   };
 }

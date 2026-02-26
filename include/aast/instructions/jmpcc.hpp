@@ -21,7 +21,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "j" << *cond_code << "\t" << *identifier << std::endl;
+      ostr << "j" << *cond_code << "\tL" << *identifier << std::endl;
     }
   };
 }

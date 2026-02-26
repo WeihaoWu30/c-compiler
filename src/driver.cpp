@@ -54,7 +54,10 @@ void cleanup()
     execlp("rm", "rm", PPF, AF, (char *)nullptr);
     _exit(1);
   }
-  wait(nullptr);
+  else
+  {
+    wait(nullptr);
+  }
 }
 
 // This function converts Assembly File To Binary Executable

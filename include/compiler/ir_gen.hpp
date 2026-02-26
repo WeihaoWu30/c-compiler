@@ -8,6 +8,7 @@
 namespace ir_gen
 {
   extern uint32_t counter;
+  extern uint32_t label_counter;
   tacky::Identifier *make_identifier();
   tacky::Unary_Operator *convert_unop(ast::Unary_Operator *exp);
   tacky::Binary_Operator *convert_binop(ast::Binary_Operator *op);
