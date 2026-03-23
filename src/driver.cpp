@@ -95,6 +95,10 @@ int main(int argc, char *argv[])
     {
       program = parser::parse(tokens);
     }
+    else if (s.compare("--validate") == 0)
+    {
+      program = parser::parse(tokens);
+    }
     else if (s.compare("--tacky") == 0)
     {
       program = parser::parse(tokens);
@@ -112,7 +116,7 @@ int main(int argc, char *argv[])
     preprocess(argv[1]);
     tokens = lexer::lex(PPF);
     program = parser::parse(tokens);
-    tacky_program = ir_gen::generate_tacky(program);
+   //  tacky_program = ir_gen::generate_tacky(program);
     assembly_program = codegen::generate_top_level(tacky_program);
     std::ofstream ostr(AF);
     if (!ostr)

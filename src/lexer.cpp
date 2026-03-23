@@ -35,7 +35,8 @@ namespace lexer
                                       std::regex("<="),
                                       std::regex(">="),
                                       std::regex("<"),
-                                      std::regex(">")};
+                                      std::regex(">"),
+                                      std::regex("=")};
   std::list<std::string> lex(const std::string &filename)
   {
 
