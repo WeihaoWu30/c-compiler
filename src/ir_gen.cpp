@@ -5,6 +5,7 @@
 #include <string>
 #include <iostream>
 
+
 namespace ir_gen
 {
     uint32_t id_counter = 0;    // Assists in creating unique temporary variables
@@ -109,6 +110,8 @@ namespace ir_gen
         ast::Constant *constant = dynamic_cast<ast::Constant *>(e);
         ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
         ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
+        ast::Var *var = dynamic_cast<ast::Var *>(e);
+        ast::Assignment *assignment = dynamic_cast<ast::Assignment*>(e);
         if (constant)
         {
             tacky::Constant *t_constant = new tacky::Constant(constant->val);
@@ -215,25 +218,52 @@ namespace ir_gen
             instructions.push_back(new_binary);
             return dst;
         }
+        else if (var){
+         tacky::Identifier *var_identifier = new tacky::Identifier(var->identifier->name);
+         return new tacky::Var(var_identifier);
+        }
+        else if (assignment){
+            ast::Var *v = dynamic_cast<ast::Var *>(assignment->lvalue);
+            if (v){
+               tacky::Val* result = emit_tacky(assignment->exp, instructions);
+               tacky::Var *tacky_var = new tacky::Var(new tacky::Identifier(v->identifier->name));
+               instructions.push_back(new tacky::Copy(result, tacky_var));
+               return tacky_var;
+            }
+        }
         return nullptr;
     }
 
     // This function converts AST function to Tacky function
     tacky::Function *generate_function(ast::Function *func)
     {
-        ast::Identifier *a_identifier = func->name;
-        ast::Return *ret = dynamic_cast<ast::Return *>(func->body);
-        if (!ret)
-        {
-            std::cerr << "Failed tacky::o Cast Function Body As Return Statement" << std::endl;
-            exit(1);
-        }
-
-        tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
-
         std::vector<tacky::Instruction *> instructions;
-        tacky::Return *t_return = new tacky::Return(emit_tacky(ret->exp, instructions));
-        instructions.push_back(t_return);
+        ast::Identifier *a_identifier = func->name;
+        tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
+        for ( ast::Block_Item* &b : func->body){
+            ast::D *d = dynamic_cast<ast::D *>(b);
+            ast::S *s = dynamic_cast<ast::S *>(b);
+            ast::Return *ret = dynamic_cast<ast::Return *>(b);
+            if (d){
+               if (d->declaration->init){
+                  emit_tacky(d->declaration->init, instructions);
+               }
+            }
+            else if (s){
+               ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
+               if (exp_statement){
+                  emit_tacky(exp_statement->exp, instructions);
+               }
+            }
+            else if (ret){
+               tacky::Return *t_return = new tacky::Return(emit_tacky(ret->exp, instructions));
+               instructions.push_back(t_return);   
+               return new tacky::Function(t_identifier, instructions);
+            }
+
+        }
+        tacky::Return *default_return = new tacky::Return(new tacky::Constant(0));  //default case to handle no return statements
+        instructions.push_back(default_return);
         return new tacky::Function(t_identifier, instructions);
     }
 

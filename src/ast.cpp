@@ -17,7 +17,7 @@ namespace ast
   {
     ostr << "Function(" << std::endl;
     ostr << "\t\tname=" << *(function.name) << ", " << std::endl;
-    ostr << "\t\tbody=" << *(function.body) << std::endl;
+   //  ostr << "\t\tbody=" << *(function.body) << std::endl;
     ostr << "\t)" << std::endl;
     return ostr;
   }
