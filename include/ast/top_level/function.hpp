@@ -4,22 +4,16 @@
 #include "ast/abstract/statement.hpp"
 #include "ast/abstract/block_item.hpp"
 #include <list>
+#include <memory>
+#include <utility>
 
 namespace ast
 {
    struct Function
    {
-      Identifier *name;
-      std::list<Block_Item *> body;
-      Function(Identifier *name_, std::list<Block_Item *> &body_) : name(name_), body(body_) {}
-      ~Function()
-      {
-         delete name;
-         for (Block_Item *b : body)
-         {
-            delete b;
-         }
-      }
+      std::unique_ptr<Identifier> name;
+      std::list<std::unique_ptr<Block_Item>> body;
+      Function(std::unique_ptr<Identifier> name_, std::list<std::unique_ptr<Block_Item>> &body_) : name(std::move(name_)), body(std::move(body_)) {}
       friend std::ostream &operator<<(std::ostream &ostr, const Function &function);
    };
 }

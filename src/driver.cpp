@@ -9,6 +9,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <iostream>
+#include <memory>
 
 // Intermediate Files that will be deleted
 #define PPF "preprocessed.i"
@@ -16,7 +17,7 @@
 
 // Prototyping
 void preprocess(char *filename);
-void destroy(ast::Program *&program, aast::Program *&assembly_program, tacky::Program *&tacky_program);
+void destroy(aast::Program *&assembly_program, tacky::Program *&tacky_program);
 void cleanup();
 void execute(const char *filename);
 int main(int argc, char *argv[]);
@@ -39,9 +40,8 @@ void preprocess(char *filename)
 }
 
 // This Function Simply just frees the memory from every stage of the compiler
-void destroy(ast::Program *&program, aast::Program *&assembly_program, tacky::Program *&tacky_program)
+void destroy(aast::Program *&assembly_program, tacky::Program *&tacky_program)
 {
-  delete program;
   delete assembly_program;
   delete tacky_program;
 }
@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
     return 1;
   }
   std::list<std::string> tokens;
-  ast::Program *program = nullptr;
+  std::unique_ptr<ast::Program> program;
   aast::Program *assembly_program = nullptr;
   tacky::Program *tacky_program = nullptr;
   if (argc == 3)
@@ -102,12 +102,12 @@ int main(int argc, char *argv[])
     else if (s.compare("--tacky") == 0)
     {
       program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program);
+      tacky_program = ir_gen::generate_tacky(program.get());
     }
     else if (s.compare("--codegen") == 0)
     {
       program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program);
+      tacky_program = ir_gen::generate_tacky(program.get());
       assembly_program = codegen::generate_top_level(tacky_program);
     }
   }
@@ -116,7 +116,7 @@ int main(int argc, char *argv[])
     preprocess(argv[1]);
     tokens = lexer::lex(PPF);
     program = parser::parse(tokens);
-   //  tacky_program = ir_gen::generate_tacky(program);
+    //  tacky_program = ir_gen::generate_tacky(program);
     assembly_program = codegen::generate_top_level(tacky_program);
     std::ofstream ostr(AF);
     if (!ostr)
@@ -134,6 +134,6 @@ int main(int argc, char *argv[])
     execute(s.c_str());
     cleanup();
   }
-  destroy(program, assembly_program, tacky_program);
+  destroy(assembly_program, tacky_program);
   return 0;
 }
