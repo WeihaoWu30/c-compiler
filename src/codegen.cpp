@@ -4,6 +4,8 @@
 #include <ostream>
 #include <list>
 #include <unordered_map>
+#include <memory>
+#include <utility>
 
 namespace codegen
 {
@@ -11,165 +13,162 @@ namespace codegen
   uint32_t total_bytes_to_reserve = 0;               // total bytes to allocate to aast::Stack Frame
 
   // This function converts Tacky Values to Immediate Values and Temporary Variables
-  aast::Operand *generate_operand(tacky::Val *&t_val)
+  std::shared_ptr<aast::Operand> generate_operand(std::shared_ptr<tacky::Val> t_val)
   {
-    tacky::Constant *t_constant = dynamic_cast<tacky::Constant *>(t_val);
-    tacky::Var *t_var = dynamic_cast<tacky::Var *>(t_val);
+    tacky::Constant *t_constant = dynamic_cast<tacky::Constant *>(t_val.get());
+    tacky::Var *t_var = dynamic_cast<tacky::Var *>(t_val.get());
     if (t_constant)
     {
-      aast::Imm *immediate_value = new aast::Imm(t_constant->val);
+      std::shared_ptr<aast::Imm> immediate_value = std::make_shared<aast::Imm>(t_constant->val);
       return immediate_value;
     }
     else if (t_var)
     {
-      aast::Identifier *assembly_identifier = new aast::Identifier(t_var->identifier->name);
-      aast::Pseudo *pseudo_identifier = new aast::Pseudo(assembly_identifier);
+      std::shared_ptr<aast::Identifier> assembly_identifier = std::make_shared<aast::Identifier>(t_var->identifier->name);
+      std::shared_ptr<aast::Pseudo> pseudo_identifier = std::make_shared<aast::Pseudo>(std::move(assembly_identifier));
       return pseudo_identifier;
     }
     return nullptr;
   }
 
   // This function converts Tacky unary operators to assembly instructions for unary operators
-  aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator *unary_operator)
+  std::unique_ptr<aast::Unary_Operator> generate_unary_operators(std::unique_ptr<tacky::Unary_Operator> unary_operator)
   {
-    tacky::Complement *t_complement = dynamic_cast<tacky::Complement *>(unary_operator);
-    tacky::Negate *t_negate = dynamic_cast<tacky::Negate *>(unary_operator);
-    tacky::Not *t_not = dynamic_cast<tacky::Not *>(unary_operator);
-    aast::Unary_Operator *res = nullptr;
+    tacky::Complement *t_complement = dynamic_cast<tacky::Complement *>(unary_operator.get());
+    tacky::Negate *t_negate = dynamic_cast<tacky::Negate *>(unary_operator.get());
+    tacky::Not *t_not = dynamic_cast<tacky::Not *>(unary_operator.get());
+    std::unique_ptr<aast::Unary_Operator> res;
     if (t_complement)
     {
-      res = new aast::Not();
+      res = std::make_unique<aast::Not>();
     }
     else if (t_negate)
     {
-      res = new aast::Neg();
+      res = std::make_unique<aast::Neg>();
     }
     else if (t_not)
     {
-      res = new aast::Not();
+      res = std::make_unique<aast::Not>();
     }
     return res;
   }
 
   // This function converts from TACKY to assembly Instructions for Binary Operators +, -, *
-  aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator *binary_operator)
+  std::unique_ptr<aast::Binary_Operator> generate_basic_binary_operators(std::unique_ptr<tacky::Binary_Operator> binary_operator)
   {
-    tacky::Add *t_add = dynamic_cast<tacky::Add *>(binary_operator);
-    tacky::Subtract *t_sub = dynamic_cast<tacky::Subtract *>(binary_operator);
-    tacky::Multiply *t_mult = dynamic_cast<tacky::Multiply *>(binary_operator);
-    aast::Binary_Operator *res = nullptr;
+    tacky::Add *t_add = dynamic_cast<tacky::Add *>(binary_operator.get());
+    tacky::Subtract *t_sub = dynamic_cast<tacky::Subtract *>(binary_operator.get());
+    tacky::Multiply *t_mult = dynamic_cast<tacky::Multiply *>(binary_operator.get());
+    std::unique_ptr<aast::Binary_Operator> res;
     if (t_add)
     {
-      res = new aast::Add();
+      res = std::make_unique<aast::Add>();
     }
     else if (t_sub)
     {
-      res = new aast::Sub();
+      res = std::make_unique<aast::Sub>();
     }
     else if (t_mult)
     {
-      res = new aast::Mult();
+      res = std::make_unique<aast::Mult>();
     }
 
     return res;
   }
 
   // This function converts the relational operators into the assembly code
-  aast::Cond_Code *generate_conditional_codes(tacky::Binary_Operator *binary_operator)
+  std::unique_ptr<aast::Cond_Code> generate_conditional_codes(std::unique_ptr<tacky::Binary_Operator> binary_operator)
   {
-    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(binary_operator);
-    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(binary_operator);
-    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(binary_operator);
-    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(binary_operator);
-    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(binary_operator);
-    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(binary_operator);
-    aast::Cond_Code *res = nullptr;
+    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(binary_operator.get());
+    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(binary_operator.get());
+    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(binary_operator.get());
+    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(binary_operator.get());
+    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(binary_operator.get());
+    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(binary_operator.get());
+    std::unique_ptr<aast::Cond_Code> res;
     if (eq)
-      res = new aast::E();
+      res = std::make_unique<aast::E>();
     else if (neq)
-      res = new aast::NE();
+      res = std::make_unique<aast::NE>();
     else if (lt)
-      res = new aast::L();
+      res = std::make_unique<aast::L>();
     else if (lte)
-      res = new aast::LE();
+      res = std::make_unique<aast::LE>();
     else if (gt)
-      res = new aast::G();
+      res = std::make_unique<aast::G>();
     else if (gte)
-      res = new aast::GE();
+      res = std::make_unique<aast::GE>();
 
     return res;
   }
 
   // This function creates the assembly Return Instruction
-  void generate_return(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_return(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Return *t_return = dynamic_cast<tacky::Return *>(instruction);
+    tacky::Return *t_return = dynamic_cast<tacky::Return *>(instruction.get());
     if (!t_return)
       return;
-    aast::Operand *val = generate_operand(t_return->val);
-    aast::AX *ax_register = new aast::AX();
-    aast::Reg *reg = new aast::Reg(ax_register);
-    aast::Mov *move = new aast::Mov(val, reg);
-    assembly_instructions.push_back(move);
+    std::shared_ptr<aast::Operand> val = generate_operand(std::move(t_return->val));
+    std::shared_ptr<aast::AX> ax_register = std::make_shared<aast::AX>();
+    std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(ax_register));
+    std::unique_ptr<aast::Mov> move = std::make_unique<aast::Mov>(std::move(val), std::move(reg));
+    assembly_instructions.push_back(std::move(move));
 
-    aast::Ret *ret = new aast::Ret();
-    assembly_instructions.push_back(ret);
+    std::unique_ptr<aast::Ret> ret = std::make_unique<aast::Ret>();
+    assembly_instructions.push_back(std::move(ret));
   }
 
   // This function creates the assembly Instruction for tacky Unary Operators
-  void generate_unary(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_unary(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Unary *t_unary = dynamic_cast<tacky::Unary *>(instruction);
+    tacky::Unary *t_unary = dynamic_cast<tacky::Unary *>(instruction.get());
     if (!t_unary)
       return;
-    tacky::Not *t_not = dynamic_cast<tacky::Not *>(t_unary->unary_operator);
+    tacky::Not *t_not = dynamic_cast<tacky::Not *>(t_unary->unary_operator.get());
+    std::shared_ptr<aast::Operand> src = generate_operand(t_unary->src);
+    std::shared_ptr<aast::Operand> dst = generate_operand(t_unary->dst);
     if (t_not)
     {
-      aast::Operand *src = generate_operand(t_unary->src);
-      aast::Operand *dst1 = generate_operand(t_unary->dst);
-      aast::Imm *imm1 = new aast::Imm(0), *imm2 = new aast::Imm(0);
-      aast::Cmp *cmp = new aast::Cmp(imm1, src);
-      assembly_instructions.push_back(cmp);
+      std::shared_ptr<aast::Imm> imm = std::make_shared<aast::Imm>(0);
+      std::unique_ptr<aast::Cmp> cmp = std::make_unique<aast::Cmp>(imm, src);
+      assembly_instructions.push_back(std::move(cmp));
 
-      aast::Mov *mov = new aast::Mov(imm2, dst1);
-      assembly_instructions.push_back(mov);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm, dst);
+      assembly_instructions.push_back(std::move(mov));
 
-      aast::E *eq = new aast::E();
-      aast::Operand *dst2 = generate_operand(t_unary->dst);
-      aast::SetCC *set_cc = new aast::SetCC(eq, dst2);
-      assembly_instructions.push_back(set_cc);
+      std::unique_ptr<aast::E> eq = std::make_unique<aast::E>();
+      std::unique_ptr<aast::SetCC> set_cc = std::make_unique<aast::SetCC>(std::move(eq), dst);
+      assembly_instructions.push_back(std::move(set_cc));
     }
     else
     {
-      aast::Operand *src = generate_operand(t_unary->src);
-      aast::Operand *dst = generate_operand(t_unary->dst);
-      aast::Mov *mov = new aast::Mov(src, dst);
-      assembly_instructions.push_back(mov);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src, dst);
+      assembly_instructions.push_back(std::move(mov));
 
-      aast::Operand *operand = generate_operand(t_unary->dst); // tacky::his is required to avoid dangling pointer later
-      aast::Unary_Operator *unary_operator = generate_unary_operators(t_unary->unary_operator);
-      aast::Unary *unary = new aast::Unary(unary_operator, operand);
-      assembly_instructions.push_back(unary);
+      std::unique_ptr<aast::Unary_Operator> unary_operator = generate_unary_operators(std::move(t_unary->unary_operator));
+      std::unique_ptr<aast::Unary> unary = std::make_unique<aast::Unary>(std::move(unary_operator), dst);
+      assembly_instructions.push_back(std::move(unary));
     }
   }
 
+  /* FIX THIS */
   // This function creates the assembly Instruction for tacky Binary Operators
-  void generate_bin(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_bin(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Binary *t_binary = dynamic_cast<tacky::Binary *>(instruction);
+    tacky::Binary *t_binary = dynamic_cast<tacky::Binary *>(instruction.get());
     if (!t_binary)
       return;
-    tacky::Add *add = dynamic_cast<tacky::Add *>(t_binary->binary_operator);
-    tacky::Subtract *subt = dynamic_cast<tacky::Subtract *>(t_binary->binary_operator);
-    tacky::Multiply *mult = dynamic_cast<tacky::Multiply *>(t_binary->binary_operator);
-    tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator);
-    tacky::Remainder *remainder = dynamic_cast<tacky::Remainder *>(t_binary->binary_operator);
-    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(t_binary->binary_operator);
-    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(t_binary->binary_operator);
-    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(t_binary->binary_operator);
-    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(t_binary->binary_operator);
-    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(t_binary->binary_operator);
-    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(t_binary->binary_operator);
+    tacky::Add *add = dynamic_cast<tacky::Add *>(t_binary->binary_operator.get());
+    tacky::Subtract *subt = dynamic_cast<tacky::Subtract *>(t_binary->binary_operator.get());
+    tacky::Multiply *mult = dynamic_cast<tacky::Multiply *>(t_binary->binary_operator.get());
+    tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator.get());
+    tacky::Remainder *remainder = dynamic_cast<tacky::Remainder *>(t_binary->binary_operator.get());
+    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(t_binary->binary_operator.get());
+    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(t_binary->binary_operator.get());
+    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(t_binary->binary_operator.get());
+    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(t_binary->binary_operator.get());
+    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(t_binary->binary_operator.get());
+    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(t_binary->binary_operator.get());
     if (add || subt || mult)
     {
       aast::Operand *mov_src = generate_operand(t_binary->src1);
@@ -587,13 +586,13 @@ namespace codegen
   }
 
   // This function converts Tacky nodes to assembly instructions
-  aast::Program *generate_top_level(tacky::Program *&tacky_program)
+  std::unique_ptr<aast::Program> generate_top_level(std::unique_ptr<tacky::Program> tacky_program)
   {
-    aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
-    std::list<aast::Instruction *> instructions = generate_instructions(tacky_program->func);
-    compiler_pass(instructions); // Convert aast::fter We aast::llocate aast::ll Needed tacky::emporary Variables
-    aast::Function *function = new aast::Function(identifier, instructions);
-    aast::Program *program = new aast::Program(function);
+    std::shared_ptr<aast::Identifier> identifier = std::make_shared<aast::Identifier>(tacky_program->func->identifier->name);
+    std::list<std::unique_ptr<aast::Instruction>> instructions = generate_instructions(std::move(tacky_program->func));
+    compiler_pass(instructions);
+    std::unique_ptr<aast::Function> function = std::make_unique<aast::Function>(std::move(identifier), std::move(instructions));
+    std::unique_ptr<aast::Program> program = std::make_unique<aast::Program>(std::move(function));
     return program;
   }
 }

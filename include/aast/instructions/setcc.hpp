@@ -5,26 +5,23 @@
 #include "aast/registers/reg_type.hpp"
 #include "aast/operands/reg.hpp"
 #include <ostream>
+#include <memory>
+#include <utility>
 
 namespace aast
 {
   struct SetCC : Instruction
   {
   public:
-    Cond_Code *cond_code;
-    Operand *operand;
-    SetCC(Cond_Code *cond_code_, Operand *operand_) : cond_code(cond_code_), operand(operand_) {}
-    ~SetCC()
-    {
-      delete cond_code;
-      delete operand;
-    }
+    std::unique_ptr<Cond_Code> cond_code;
+    std::shared_ptr<Operand> operand;
+    SetCC(std::unique_ptr<Cond_Code> cond_code_, std::shared_ptr<Operand> operand_) : cond_code(std::move(cond_code_)), operand(std::move(operand_)) {}
 
   protected:
     void write(std::ostream &ostr) const override
     {
       ostr << "set" << *cond_code << "\t";
-      Reg *reg = dynamic_cast<Reg *>(operand);
+      Reg *reg = dynamic_cast<Reg *>(operand.get());
       if (reg)
       {
         AX *ax = dynamic_cast<AX *>(reg);

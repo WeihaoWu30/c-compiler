@@ -2,18 +2,15 @@
 #include "tacky/abstract/instruction.hpp"
 #include "tacky/top_level/identifier.hpp"
 #include "tacky/abstract/val.hpp"
+#include <memory>
+#include <utility>
 
 namespace tacky
 {
   struct JumpIfNotZero : Instruction
   {
-    Val *condition;
-    Identifier *target;
-    JumpIfNotZero(Val *condition_, Identifier *target_) : condition(condition_), target(target_) {}
-    ~JumpIfNotZero()
-    {
-      delete condition;
-      delete target;
-    }
+    std::shared_ptr<Val> condition;
+    std::shared_ptr<Identifier> target;
+    JumpIfNotZero(std::shared_ptr<Val> condition_, std::shared_ptr<Identifier> target_) : condition(std::move(condition_)), target(std::move(target_)) {}
   };
 }

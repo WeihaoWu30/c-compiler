@@ -1,16 +1,14 @@
 #pragma once
 #include "tacky/abstract/instruction.hpp"
 #include "tacky/top_level/identifier.hpp"
+#include <memory>
+#include <utility>
 
 namespace tacky
 {
   struct Label : Instruction
   {
-    Identifier *identifier;
-    Label(Identifier *identifer_) : identifier(identifer_) {}
-    ~Label()
-    {
-      delete identifier;
-    }
+    std::shared_ptr<Identifier> identifier;
+    Label(std::shared_ptr<Identifier> identifer_) : identifier(std::move(identifer_)) {}
   };
 }

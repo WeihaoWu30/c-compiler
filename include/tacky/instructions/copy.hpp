@@ -1,17 +1,14 @@
 #pragma once
 #include "tacky/abstract/instruction.hpp"
 #include "tacky/abstract/val.hpp"
+#include <memory>
+#include <utility>
 
 namespace tacky
 {
   struct Copy : Instruction
   {
-    Val *src, *dst;
-    Copy(Val *src_, Val *dst_) : src(src_), dst(dst_) {}
-    ~Copy()
-    {
-      delete src;
-      delete dst;
-    }
+    std::shared_ptr<Val> src, dst;
+    Copy(std::shared_ptr<Val> src_, std::shared_ptr<Val> dst_) : src(std::move(src_)), dst(std::move(dst_)) {}
   };
 }

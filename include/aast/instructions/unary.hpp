@@ -3,20 +3,17 @@
 #include "aast/abstract/unary_operator.hpp"
 #include "aast/abstract/operand.hpp"
 #include <ostream>
+#include <memory>
+#include <utility>
 
 namespace aast
 {
   struct Unary : Instruction
   {
   public:
-    Unary_Operator *unary_operator;
-    Operand *operand;
-    Unary(Unary_Operator *unary_operator_, Operand *operand_) : unary_operator(unary_operator_), operand(operand_) {}
-    ~Unary()
-    {
-      delete unary_operator;
-      delete operand;
-    }
+    std::unique_ptr<Unary_Operator> unary_operator;
+    std::shared_ptr<Operand> operand;
+    Unary(std::unique_ptr<Unary_Operator> unary_operator_, std::shared_ptr<Operand> operand_) : unary_operator(std::move(unary_operator_)), operand(std::move(operand_)) {}
 
   protected:
     void write(std::ostream &ostr) const override

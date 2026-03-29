@@ -2,15 +2,16 @@
 #include "aast/abstract/operand.hpp"
 #include "aast/top_level/identifier.hpp"
 #include <ostream>
+#include <memory>
+#include <utility>
 
 namespace aast
 {
   struct Pseudo : Operand
   {
   public:
-    Identifier *identifier;
-    Pseudo(Identifier *identifier_) : identifier(identifier_) {}
-    ~Pseudo() { delete identifier; }
+    std::shared_ptr<Identifier> identifier;
+    Pseudo(std::shared_ptr<Identifier> identifier_) : identifier(std::move(identifier_)) {}
 
   protected:
     void write(std::ostream &ostr) const override

@@ -17,7 +17,6 @@
 
 // Prototyping
 void preprocess(char *filename);
-void destroy(aast::Program *&assembly_program, tacky::Program *&tacky_program);
 void cleanup();
 void execute(const char *filename);
 int main(int argc, char *argv[]);
@@ -37,13 +36,6 @@ void preprocess(char *filename)
   {
     wait(nullptr);
   }
-}
-
-// This Function Simply just frees the memory from every stage of the compiler
-void destroy(aast::Program *&assembly_program, tacky::Program *&tacky_program)
-{
-  delete assembly_program;
-  delete tacky_program;
 }
 
 // This function removes the intermediate files
@@ -82,8 +74,8 @@ int main(int argc, char *argv[])
   }
   std::list<std::string> tokens;
   std::unique_ptr<ast::Program> program;
-  aast::Program *assembly_program = nullptr;
-  tacky::Program *tacky_program = nullptr;
+  std::unique_ptr<tacky::Program> tacky_program;
+  std::unique_ptr<aast::Program> assembly_program;
   if (argc == 3)
   { // when a flag is specified to the compiler
     preprocess(argv[2]);
@@ -102,13 +94,13 @@ int main(int argc, char *argv[])
     else if (s.compare("--tacky") == 0)
     {
       program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program.get());
+      tacky_program = ir_gen::generate_tacky(std::move(program));
     }
     else if (s.compare("--codegen") == 0)
     {
       program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program.get());
-      assembly_program = codegen::generate_top_level(tacky_program);
+      tacky_program = ir_gen::generate_tacky(std::move(program));
+      assembly_program = codegen::generate_top_level(std::move(tacky_program));
     }
   }
   else
@@ -117,7 +109,7 @@ int main(int argc, char *argv[])
     tokens = lexer::lex(PPF);
     program = parser::parse(tokens);
     //  tacky_program = ir_gen::generate_tacky(program);
-    assembly_program = codegen::generate_top_level(tacky_program);
+    assembly_program = codegen::generate_top_level(std::move(tacky_program));
     std::ofstream ostr(AF);
     if (!ostr)
     {
@@ -134,6 +126,5 @@ int main(int argc, char *argv[])
     execute(s.c_str());
     cleanup();
   }
-  destroy(assembly_program, tacky_program);
   return 0;
 }

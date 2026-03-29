@@ -1,16 +1,14 @@
 #pragma once
 #include "tacky/abstract/instruction.hpp"
 #include "tacky/abstract/val.hpp"
+#include <memory>
+#include <utility>
 
 namespace tacky
 {
   struct Return : Instruction
   {
-    Val *val;
-    Return(Val *val_) : val(val_) {}
-    ~Return()
-    {
-      delete val;
-    }
+    std::unique_ptr<Val> val;
+    Return(std::unique_ptr<Val> val_) : val(std::move(val_)) {}
   };
 }
