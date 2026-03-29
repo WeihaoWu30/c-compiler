@@ -9,8 +9,9 @@
 
 namespace codegen
 {
-  std::unordered_map<std::string, int> stack_offset; // unique rbp jumps
-  uint32_t total_bytes_to_reserve = 0;               // total bytes to allocate to aast::Stack Frame
+  std::unordered_map<std::string, int> stack_offset;               // unique rbp jumps
+  std::unordered_map<int, std::shared_ptr<aast::Stack>> addresses; // the stack object
+  uint32_t total_bytes_to_reserve = 0;                             // total bytes to allocate to aast::Stack Frame
 
   // This function converts Tacky Values to Immediate Values and Temporary Variables
   std::shared_ptr<aast::Operand> generate_operand(std::shared_ptr<tacky::Val> t_val)
@@ -103,7 +104,7 @@ namespace codegen
   }
 
   // This function creates the assembly Return Instruction
-  void generate_return(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
+  void generate_return(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
     tacky::Return *t_return = dynamic_cast<tacky::Return *>(instruction.get());
     if (!t_return)
@@ -119,7 +120,7 @@ namespace codegen
   }
 
   // This function creates the assembly Instruction for tacky Unary Operators
-  void generate_unary(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
+  void generate_unary(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
     tacky::Unary *t_unary = dynamic_cast<tacky::Unary *>(instruction.get());
     if (!t_unary)
@@ -151,9 +152,8 @@ namespace codegen
     }
   }
 
-  /* FIX THIS */
   // This function creates the assembly Instruction for tacky Binary Operators
-  void generate_bin(std::unique_ptr<tacky::Instruction> instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
+  void generate_bin(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
     tacky::Binary *t_binary = dynamic_cast<tacky::Binary *>(instruction.get());
     if (!t_binary)
@@ -171,139 +171,137 @@ namespace codegen
     tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(t_binary->binary_operator.get());
     if (add || subt || mult)
     {
-      aast::Operand *mov_src = generate_operand(t_binary->src1);
-      aast::Operand *mov_dst = generate_operand(t_binary->dst);
-      aast::Mov *mov = new aast::Mov(mov_src, mov_dst);
-      assembly_instructions.push_back(mov);
+      std::shared_ptr<aast::Operand> mov_src = generate_operand(std::move(t_binary->src1));
+      std::shared_ptr<aast::Operand> dst = generate_operand(std::move(t_binary->dst));
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::move(mov_src), dst);
+      assembly_instructions.push_back(std::move(mov));
 
-      aast::Operand *bin_src = generate_operand(t_binary->src2);
-      aast::Operand *bin_dst = generate_operand(t_binary->dst);
-      aast::Binary_Operator *bin_op = generate_basic_binary_operators(t_binary->binary_operator);
-      aast::Binary *binary = new aast::Binary(bin_op, bin_src, bin_dst);
-      assembly_instructions.push_back(binary);
+      std::shared_ptr<aast::Operand> bin_src = generate_operand(std::move(t_binary->src2));
+      std::unique_ptr<aast::Binary_Operator> bin_op = generate_basic_binary_operators(std::move(t_binary->binary_operator));
+      std::unique_ptr<aast::Binary> binary = std::make_unique<aast::Binary>(std::move(bin_op), std::move(bin_src), dst);
+      assembly_instructions.push_back(std::move(binary));
     }
     else if (div || remainder)
     {
-      aast::RegType *reg_type1 = new aast::AX(), *reg_type2 = nullptr;
+      std::shared_ptr<aast::RegType> reg_type1 = std::make_shared<aast::AX>(), reg_type2;
       if (div)
       {
-        reg_type2 = new aast::AX(); // quotient goes in eax
+        reg_type2 = reg_type1; // quotient goes in eax
       }
       else if (remainder)
       {
-        reg_type2 = new aast::DX(); // remainder goes int edx
+        reg_type2 = std::make_shared<aast::DX>(); // remainder goes int edx
       }
-      aast::Reg *mov1_reg = new aast::Reg(reg_type1);
+      std::shared_ptr<aast::Reg> mov1_reg = std::make_shared<aast::Reg>(reg_type1);
 
-      aast::Operand *mov_src = generate_operand(t_binary->src1); // dividend
-      aast::Mov *mov1 = new aast::Mov(mov_src, mov1_reg);
-      assembly_instructions.push_back(mov1);
+      std::shared_ptr<aast::Operand> mov_src = generate_operand(std::move(t_binary->src1)); // dividend
+      std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(std::move(mov_src), std::move(mov1_reg));
+      assembly_instructions.push_back(std::move(mov1));
 
-      aast::Cdq *cdq = new aast::Cdq(); // sign extension since idiv can only take in 6 bit values
-      assembly_instructions.push_back(cdq);
+      std::unique_ptr<aast::Cdq> cdq = std::make_unique<aast::Cdq>(); // sign extension since idiv can only take in 6 bit values
+      assembly_instructions.push_back(std::move(cdq));
 
-      aast::Operand *div_src = generate_operand(t_binary->src2); // divisor
-      aast::Idiv *idiv = new aast::Idiv(div_src);
-      assembly_instructions.push_back(idiv);
+      std::shared_ptr<aast::Operand> div_src = generate_operand(std::move(t_binary->src2)); // divisor
+      std::unique_ptr<aast::Idiv> idiv = std::make_unique<aast::Idiv>(std::move(div_src));
+      assembly_instructions.push_back(std::move(idiv));
 
-      aast::Reg *mov2_reg = new aast::Reg(reg_type2);
-      aast::Operand *mov_dst = generate_operand(t_binary->dst);
-      aast::Mov *mov2 = new aast::Mov(mov2_reg, mov_dst); // copy register value to address
-      assembly_instructions.push_back(mov2);
+      std::shared_ptr<aast::Reg> mov2_reg = std::make_shared<aast::Reg>(std::move(reg_type2));
+      std::shared_ptr<aast::Operand> mov_dst = generate_operand(std::move(t_binary->dst));
+      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(std::move(mov2_reg), std::move(mov_dst)); // copy register value to address
+      assembly_instructions.push_back(std::move(mov2));
     }
     else if (eq || neq || lt || lte || gt || gte)
     {
-      aast::Operand *src1 = generate_operand(t_binary->src1);
-      aast::Operand *src2 = generate_operand(t_binary->src2);
-      aast::Cmp *cmp = new aast::Cmp(src2, src1);
-      assembly_instructions.push_back(cmp);
+      std::shared_ptr<aast::Operand> src1 = generate_operand(std::move(t_binary->src1));
+      std::shared_ptr<aast::Operand> src2 = generate_operand(std::move(t_binary->src2));
+      std::unique_ptr<aast::Cmp> cmp = std::make_unique<aast::Cmp>(std::move(src2), std::move(src1));
+      assembly_instructions.push_back(std::move(cmp));
 
-      aast::Imm *imm = new aast::Imm(0);
-      aast::Operand *dst1 = generate_operand(t_binary->dst);
-      aast::Mov *mov = new aast::Mov(imm, dst1);
-      assembly_instructions.push_back(mov);
+      std::shared_ptr<aast::Imm> imm = std::make_shared<aast::Imm>(0);
+      std::shared_ptr<aast::Operand> dst = generate_operand(std::move(t_binary->dst));
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::move(imm), dst);
+      assembly_instructions.push_back(std::move(mov));
 
-      aast::Operand *dst2 = generate_operand(t_binary->dst);
-      aast::Cond_Code *code = generate_conditional_codes(t_binary->binary_operator);
-      aast::SetCC *set_cc = new aast::SetCC(code, dst2);
-      assembly_instructions.push_back(set_cc);
+      std::unique_ptr<aast::Cond_Code> code = generate_conditional_codes(std::move(t_binary->binary_operator));
+      std::unique_ptr<aast::SetCC> set_cc = std::make_unique<aast::SetCC>(std::move(code), dst);
+      assembly_instructions.push_back(std::move(set_cc));
     }
   }
 
   // This function converts conditional jumps from TACKY to assembly instructions
-  void generate_jmp_if(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_jmp_if(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::JumpIfZero *jmp_if_zero = dynamic_cast<tacky::JumpIfZero *>(instruction);
-    tacky::JumpIfNotZero *jmp_if_not_zero = dynamic_cast<tacky::JumpIfNotZero *>(instruction);
+    tacky::JumpIfZero *jmp_if_zero = dynamic_cast<tacky::JumpIfZero *>(instruction.get());
+    tacky::JumpIfNotZero *jmp_if_not_zero = dynamic_cast<tacky::JumpIfNotZero *>(instruction.get());
     if (!jmp_if_zero && !jmp_if_not_zero)
       return;
 
-    aast::Operand *val = nullptr;
-    aast::Identifier *target = nullptr;
-    aast::Cond_Code *cond_code = nullptr;
+    std::shared_ptr<aast::Operand> val;
+    std::shared_ptr<aast::Identifier> target;
+    std::unique_ptr<aast::Cond_Code> cond_code;
     if (jmp_if_zero)
     {
-      val = generate_operand(jmp_if_zero->condition);
-      target = new aast::Identifier(jmp_if_zero->target->name);
-      cond_code = new aast::E();
+      val = generate_operand(std::move(jmp_if_zero->condition));
+      target = std::make_shared<aast::Identifier>(jmp_if_zero->target->name);
+      cond_code = std::make_unique<aast::E>();
     }
     else if (jmp_if_not_zero)
     {
-      val = generate_operand(jmp_if_not_zero->condition);
-      target = new aast::Identifier(jmp_if_not_zero->target->name);
-      cond_code = new aast::NE();
+      val = generate_operand(std::move(jmp_if_not_zero->condition));
+      target = std::make_shared<aast::Identifier>(jmp_if_not_zero->target->name);
+      cond_code = std::make_unique<aast::NE>();
     }
 
-    aast::Imm *imm = new aast::Imm(0);
-    aast::Cmp *cmp = new aast::Cmp(imm, val);
-    assembly_instructions.push_back(cmp);
+    std::shared_ptr<aast::Imm> imm = std::make_shared<aast::Imm>(0);
+    std::unique_ptr<aast::Cmp> cmp = std::make_unique<aast::Cmp>(imm, val);
+    assembly_instructions.push_back(std::move(cmp));
 
-    aast::JmpCC *jmp_cc = new aast::JmpCC(cond_code, target);
-    assembly_instructions.push_back(jmp_cc);
+    std::unique_ptr<aast::JmpCC> jmp_cc = std::make_unique<aast::JmpCC>(std::move(cond_code), std::move(target));
+    assembly_instructions.push_back(std::move(jmp_cc));
   }
 
   // This function converts a regular TACKY jump to a Assembly jump
-  void generate_jmp(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_jmp(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Jump *jmp = dynamic_cast<tacky::Jump *>(instruction);
+    tacky::Jump *jmp = dynamic_cast<tacky::Jump *>(instruction.get());
     if (!jmp)
       return;
 
-    aast::Identifier *identifier = new aast::Identifier(jmp->target->name);
-    aast::Jmp *simple_jmp = new aast::Jmp(identifier);
-    assembly_instructions.push_back(simple_jmp);
+    std::shared_ptr<aast::Identifier> identifier = std::make_shared<aast::Identifier>(jmp->target->name);
+    std::unique_ptr<aast::Jmp> simple_jmp = std::make_unique<aast::Jmp>(std::move(identifier));
+    assembly_instructions.push_back(std::move(simple_jmp));
   }
 
   // This function converts a regular TACKY label to a Assembly label
-  void generate_label(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_label(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Label *label = dynamic_cast<tacky::Label *>(instruction);
+    tacky::Label *label = dynamic_cast<tacky::Label *>(instruction.get());
     if (!label)
       return;
 
-    aast::Identifier *identifier = new aast::Identifier(label->identifier->name);
-    aast::Label *a_label = new aast::Label(identifier);
-    assembly_instructions.push_back(a_label);
+    std::shared_ptr<aast::Identifier> identifier = std::make_shared<aast::Identifier>(label->identifier->name);
+    std::unique_ptr<aast::Label> a_label = std::make_unique<aast::Label>(std::move(identifier));
+    assembly_instructions.push_back(std::move(a_label));
   }
 
   // This function converts a TACKY copy to a Mov instruction
-  void generate_copy(tacky::Instruction *&instruction, std::list<aast::Instruction *> &assembly_instructions)
+  void generate_copy(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions)
   {
-    tacky::Copy *copy = dynamic_cast<tacky::Copy *>(instruction);
+    tacky::Copy *copy = dynamic_cast<tacky::Copy *>(instruction.get());
     if (!copy)
       return;
 
-    aast::Operand *src = generate_operand(copy->src);
-    aast::Operand *dst = generate_operand(copy->dst);
-    aast::Mov *mov = new aast::Mov(src, dst);
-    assembly_instructions.push_back(mov);
+    std::shared_ptr<aast::Operand> src = generate_operand(std::move(copy->src));
+    std::shared_ptr<aast::Operand> dst = generate_operand(std::move(copy->dst));
+    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::move(src), std::move(dst));
+    assembly_instructions.push_back(std::move(mov));
   }
 
   // This function converts every tacky Instruction to a set of assembly instructions
-  std::list<aast::Instruction *> generate_instructions(tacky::Function *func)
+  std::list<std::unique_ptr<aast::Instruction>> generate_instructions(std::unique_ptr<tacky::Function> func)
   {
-    std::list<aast::Instruction *> assembly_instructions;
-    for (tacky::Instruction *&instruction : func->body)
+    std::list<std::unique_ptr<aast::Instruction>> assembly_instructions;
+    for (std::unique_ptr<tacky::Instruction> &instruction : func->body)
     {
       generate_jmp_if(instruction, assembly_instructions);
       generate_return(instruction, assembly_instructions);
@@ -318,7 +316,7 @@ namespace codegen
   }
 
   // This function converts the temporary variable to a offset from the base caller address within the stack frame
-  aast::Stack *replace_pseudo(aast::Pseudo *pseudo)
+  std::shared_ptr<aast::Stack> replace_pseudo(aast::Pseudo *pseudo)
   {
     std::string var(pseudo->identifier->name);
     if (!stack_offset.count(var))
@@ -326,19 +324,24 @@ namespace codegen
       total_bytes_to_reserve += 4;
       stack_offset[var] = -total_bytes_to_reserve;
     }
-    aast::Stack *stack = new aast::Stack(stack_offset[var]);
-    return stack;
+    if (addresses.count(stack_offset[var]))
+    {
+      return addresses[stack_offset[var]];
+    }
+    addresses.insert({stack_offset[var], std::make_shared<aast::Stack>(stack_offset[var])});
+    return addresses[stack_offset[var]];
   }
 
+  // DELETE CERTAIN OBJECTS AND USE SHARED POINTERS TO RESERVE MEMORY
   // This function assists in replacing pseudo variables for mov
-  void fix_mov(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
-    aast::Mov *mov = dynamic_cast<aast::Mov *>(*it);
+    aast::Mov *mov = dynamic_cast<aast::Mov *>(it->get());
     if (!mov)
       return;
-    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(mov->src);
-    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(mov->dst);
-    aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
+    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(mov->src.get());
+    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(mov->dst.get());
+    std::shared_ptr<aast::Stack> src_stack, dst_stack;
     if (src && dst)
     { // separate into 2 instructions using r10d register
       src_stack = replace_pseudo(src);
@@ -567,10 +570,10 @@ namespace codegen
   }
 
   // This function converts every temporary Variable (Pseudo) to a stack offset
-  void compiler_pass(std::list<aast::Instruction *> &instructions)
+  void compiler_pass(std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
     // aast::ll of the replacements follow the same steps: create aast::Stack struct, delete aast::Pseudo, replace with aast::Stack struct
-    for (typename std::list<aast::Instruction *>::iterator it = instructions.begin(); it != instructions.end(); ++it)
+    for (typename std::list<std::unique_ptr<aast::Instruction>>::iterator it = instructions.begin(); it != instructions.end(); ++it)
     {
       fix_mov(it, instructions);
       fix_unary(it);
@@ -581,8 +584,8 @@ namespace codegen
       fix_div(it, instructions);
     }
 
-    aast::AllocateStack *allocateStack = new aast::AllocateStack(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
-    instructions.push_front(allocateStack);
+    std::unique_ptr<aast::AllocateStack> allocateStack = std::make_unique<aast::AllocateStack>(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
+    instructions.push_front(std::move(allocateStack));
   }
 
   // This function converts Tacky nodes to assembly instructions

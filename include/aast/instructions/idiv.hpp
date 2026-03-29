@@ -2,15 +2,16 @@
 #include "aast/abstract/instruction.hpp"
 #include "aast/abstract/operand.hpp"
 #include <ostream>
+#include <memory>
+#include <utility>
 
 namespace aast
 {
   struct Idiv : Instruction
   {
   public:
-    Operand *operand;
-    Idiv(Operand *operand_) : operand(operand_) {}
-    ~Idiv() { delete operand; }
+    std::shared_ptr<Operand> operand;
+    Idiv(std::shared_ptr<Operand> operand_) : operand(std::move(operand_)) {}
 
   protected:
     void write(std::ostream &ostr) const override

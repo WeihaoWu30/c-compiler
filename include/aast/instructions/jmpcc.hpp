@@ -3,20 +3,17 @@
 #include "aast/top_level/identifier.hpp"
 #include "aast/abstract/cond_code.hpp"
 #include <ostream>
+#include <memory>
+#include <utility>
 
 namespace aast
 {
   struct JmpCC : Instruction
   {
   public:
-    Cond_Code *cond_code;
-    Identifier *identifier;
-    JmpCC(Cond_Code *cond_code_, Identifier *identifier_) : cond_code(cond_code_), identifier(identifier_) {}
-    ~JmpCC()
-    {
-      delete cond_code;
-      delete identifier;
-    }
+    std::unique_ptr<Cond_Code> cond_code;
+    std::shared_ptr<Identifier> identifier;
+    JmpCC(std::unique_ptr<Cond_Code> cond_code_, std::shared_ptr<Identifier> identifier_) : cond_code(std::move(cond_code_)), identifier(std::move(identifier_)) {}
 
   protected:
     void write(std::ostream &ostr) const override
