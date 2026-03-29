@@ -347,109 +347,100 @@ namespace codegen
       src_stack = replace_pseudo(src);
       dst_stack = replace_pseudo(dst);
 
-      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
-      aast::Reg *register_1 = new aast::Reg(r10_1), *register_2 = new aast::Reg(r10_2);
-      aast::Mov *new_mov = new aast::Mov(src_stack, register_1); // copies src to register
+      std::shared_ptr<aast::R10> r10 = std::make_shared<aast::R10>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(r10));
+      std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(src_stack, reg); // copies src to register
 
-      delete mov->src;
-      mov->src = register_2; // replaces current temporary variable with register
-      delete mov->dst;
-      mov->dst = dst_stack;                  // new address
-      it = instructions.insert(it, new_mov); // Inserts before the current Mov Instruction
+      mov->src = std::move(reg);                        // replaces current temporary variable with register
+      mov->dst = dst_stack;                             // new address
+      it = instructions.insert(it, std::move(new_mov)); // Inserts before the current Mov Instruction
     }
     else if (src)
     {
       src_stack = replace_pseudo(src);
-      delete mov->src;
       mov->src = src_stack;
     }
     else if (dst)
     {
       dst_stack = replace_pseudo(dst);
-      delete mov->dst;
       mov->dst = dst_stack;
     }
   }
 
   // This function assists in replacing pseudo variables for unary operators
-  void fix_unary(typename std::list<aast::Instruction *>::iterator &it)
+  void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it)
   {
-    aast::Unary *unary = dynamic_cast<aast::Unary *>(*it);
+    aast::Unary *unary = dynamic_cast<aast::Unary *>(it->get());
     if (!unary)
       return;
-    aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(unary->operand);
+    aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(unary->operand.get());
     if (operand)
     {
-      aast::Stack *stack = replace_pseudo(operand);
-      delete unary->operand;
+      std::shared_ptr<aast::Stack> stack = replace_pseudo(operand);
       unary->operand = stack;
     }
   }
 
   // This function assists in replacing pseudo variables for addiiton and subtraction operators
-  void fix_add_sub(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  void fix_add_sub(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
-    aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
+    aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
       return;
-    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
+    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator.get());
     if (mult)
       return;
-    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
-    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
-    aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
+    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1.get());
+    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2.get());
+    std::shared_ptr<aast::Stack> src_stack, dst_stack;
     if (operand1 && operand2)
     { // same as mov with 2 addresses
       src_stack = replace_pseudo(operand1);
       dst_stack = replace_pseudo(operand2);
 
-      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
-      aast::Reg *reg1 = new aast::Reg(r10_1), *reg2 = new aast::Reg(r10_2);
-      aast::Mov *mov = new aast::Mov(src_stack, reg1);
+      std::shared_ptr<aast::R10> r10 = std::make_shared<aast::R10>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(r10));
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg);
 
-      delete binary->operand1;
-      binary->operand1 = reg2;
-      delete binary->operand2;
+      binary->operand1 = std::move(reg);
       binary->operand2 = dst_stack;
-      it = instructions.insert(it, mov);
+      it = instructions.insert(it, std::move(mov));
     }
     else if (operand1)
     {
       src_stack = replace_pseudo(operand1);
-      delete binary->operand1;
       binary->operand1 = src_stack;
     }
     else if (operand2)
     {
       dst_stack = replace_pseudo(operand2);
-      delete binary->operand2;
       binary->operand2 = dst_stack;
     }
 
-    aast::Imm *dst = dynamic_cast<aast::Imm *>(binary->operand2);
+    aast::Imm *dst = dynamic_cast<aast::Imm *>(binary->operand2.get());
     if (dst)
     {
-      aast::R11 *r11_1 = new aast::R11(), *r11_2 = new aast::R11();
-      aast::Reg *mov_reg = new aast::Reg(r11_1), *bin_reg = new aast::Reg(r11_2);
-      delete binary->operand2;
-      binary->operand2 = bin_reg;
+      std::shared_ptr<aast::R11> r11 = std::make_shared<aast::R11>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(r11));
+      binary->operand2 = reg;
 
-      aast::Mov *mov = new aast::Mov(dst, mov_reg);
-      it = instructions.insert(it, mov);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::make_shared<aast::Imm>(dst), reg);
+      it = instructions.insert(it, std::move(mov));
     }
   }
 
+  // FIX THIS
   // This function assists in replacing pseudo variables for multiplication operator
-  void fix_mult(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  void fix_mult(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
-    aast::Binary *binary = dynamic_cast<aast::Binary *>(*it);
+    aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
       return;
-    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
+    aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator.get());
     if (!mult)
       return;
-    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1);
-    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1.get());
+    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2.get());
     aast::Stack *mov1_stack = nullptr, *mov2_stack = nullptr;
     if (src)
     {
