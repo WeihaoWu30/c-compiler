@@ -8,7 +8,7 @@ namespace tacky
 {
   struct Return : Instruction
   {
-    std::unique_ptr<Val> val;
-    Return(std::unique_ptr<Val> val_) : val(std::move(val_)) {}
+    std::shared_ptr<Val> val;
+    Return(std::shared_ptr<Val> val_) : val(std::move(val_)) {}
   };
 }

@@ -13,6 +13,7 @@
 namespace codegen
 {
   extern std::unordered_map<std::string, int> stack_offset;
+  extern std::unordered_map<int, std::shared_ptr<aast::Stack>> addresses;
   extern uint32_t total_bytes_to_reserve;
 
   std::shared_ptr<aast::Operand> generate_operand(std::shared_ptr<tacky::Val> t_val);
@@ -28,13 +29,13 @@ namespace codegen
   void generate_copy(std::unique_ptr<tacky::Instruction> &instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions);
   std::list<std::unique_ptr<aast::Instruction>> generate_instructions(std::unique_ptr<tacky::Function> func);
   std::shared_ptr<aast::Stack> replace_pseudo(aast::Pseudo *pseudo);
-  void fix_mov(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions);
-  void fix_unary(typename std::list<aast::Instruction *>::iterator &it);
-  void fix_add_sub(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions);
-  void fix_mult(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions);
-  void fix_div(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions);
-  void fix_cmp(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions);
-  void fix_set(typename std::list<aast::Instruction *>::iterator &it);
-  void compiler_pass(std::list<aast::Instruction *> &instructions);
+  void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions);
+  void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it);
+  void fix_add_sub(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions);
+  void fix_mult(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions);
+  void fix_div(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions);
+  void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions);
+  void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it);
+  void compiler_pass(std::list<std::unique_ptr<aast::Instruction>> &instructions);
   std::unique_ptr<aast::Program> generate_top_level(std::unique_ptr<tacky::Program> tacky_program);
 }

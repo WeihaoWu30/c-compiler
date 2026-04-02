@@ -11,6 +11,6 @@ namespace tacky
   {
     std::unique_ptr<Identifier> identifier;
     std::vector<std::unique_ptr<Instruction>> body;
-    Function(std::unique_ptr<Identifier> identifer_, std::vector<std::unique_ptr<Instruction>> &body_) : identifier(std::move(identifer_)), body(std::move(body_)) {}
+    Function(std::unique_ptr<Identifier> identifer_, std::vector<std::unique_ptr<Instruction>> body_) : identifier(std::move(identifer_)), body(std::move(body_)) {}
   };
 }

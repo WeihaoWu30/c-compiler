@@ -155,7 +155,7 @@ namespace parser
          {
             expect("=", tokens);
             right = parse_expression(tokens, precedence(next_token));
-            left = std::make_unique<ast::Assignment>(left, right);
+            left = std::make_unique<ast::Assignment>(std::move(left), std::move(right));
          }
          else
          {
@@ -218,7 +218,7 @@ namespace parser
          expect("return", tokens);
          std::unique_ptr<ast::Expression> return_val = parse_expression(tokens, 0);
          expect(";", tokens);
-         std::unique_ptr<ast::Return> ret = std::make_unique<ast::Return>(return_val);
+         std::unique_ptr<ast::Return> ret = std::make_unique<ast::Return>(std::move(return_val));
          return ret;
       }
       else if (tokens.front() == ";")
@@ -230,7 +230,7 @@ namespace parser
       else
       {
          std::unique_ptr<ast::Expression> exp = parse_expression(tokens, 0);
-         std::unique_ptr<ast::Expression_Statement> exp_statement = std::make_unique<ast::Expression_Statement>(exp);
+         std::unique_ptr<ast::Expression_Statement> exp_statement = std::make_unique<ast::Expression_Statement>(std::move(exp));
          expect(";", tokens);
          return exp_statement;
       }
@@ -277,7 +277,7 @@ namespace parser
       {
          declaration->init = resolve_exp(std::move(declaration->init));
       }
-      return std::make_unique<ast::Declaration>(std::make_shared<ast::Identifier>(unique_name), declaration->init);
+      return std::make_unique<ast::Declaration>(std::make_shared<ast::Identifier>(unique_name), std::move(declaration->init));
    }
 
    std::unique_ptr<ast::Statement> resolve_statement(std::unique_ptr<ast::Statement> statement)
@@ -325,8 +325,8 @@ namespace parser
          if (tokens.front() == "=")
          {
             expect("=", tokens);
-            std::unique_ptr<ast::Expression> exp = std::make_unique<ast::Expression>(parse_expression(tokens, 0));
-            declaration = std::make_unique<ast::Declaration>(variable->identifier, exp); // shares identifier with Var
+            std::unique_ptr<ast::Expression> exp = parse_expression(tokens, 0);
+            declaration = std::make_unique<ast::Declaration>(variable->identifier, std::move(exp)); // shares identifier with Var
             expect(";", tokens);
          }
          else if (tokens.front() == ";")
@@ -365,7 +365,7 @@ namespace parser
       while (tokens.front() != "}")
       {
          std::unique_ptr<ast::Block_Item> next_block_item = parse_block_item(tokens);
-         function_body.push_back(next_block_item);
+         function_body.push_back(std::move(next_block_item));
       }
       expect("}", tokens);
       if (!tokens.empty())
@@ -373,7 +373,7 @@ namespace parser
          std::cerr << "Extra Characters Found For Minimal Compiler" << std::endl;
          exit(1);
       }
-      std::unique_ptr<ast::Function> function = std::make_unique<ast::Function>(func_name, function_body);
+      std::unique_ptr<ast::Function> function = std::make_unique<ast::Function>(std::move(func_name), std::move(function_body));
       return function;
    }
 

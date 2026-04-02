@@ -1,5 +1,6 @@
 #include "aast/aast.hpp"
 #include <ostream>
+#include <memory>
 
 namespace aast
 {
@@ -22,14 +23,14 @@ namespace aast
     ostr << "\t" << "pushq\t%rbp" << std::endl;
     ostr << "\t" << "movq\t%rsp, %rbp" << std::endl;
 
-    Ret *return_instruction = nullptr; // return instruction has to come after popping off the stack frame
-    for (Instruction *instr : function.instructions)
+    std::unique_ptr<Ret> return_instruction = std::make_unique<Ret>(); // return instruction has to come after popping off the stack frame
+    for (const std::unique_ptr<Instruction> &instr : function.instructions)
     {
-      return_instruction = dynamic_cast<Ret *>(instr);
-      if (return_instruction)
+      aast::Ret *ret = dynamic_cast<Ret *>(instr.get());
+      if (ret)
         continue;
 
-      if (dynamic_cast<Label *>(instr))
+      if (dynamic_cast<Label *>(instr.get()))
       {
         ostr << std::endl
              << *instr;

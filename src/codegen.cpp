@@ -424,7 +424,7 @@ namespace codegen
       std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(r11));
       binary->operand2 = reg;
 
-      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::make_shared<aast::Imm>(dst), reg);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::make_shared<aast::Imm>(dst->val), reg);
       it = instructions.insert(it, std::move(mov));
     }
   }
@@ -441,121 +441,109 @@ namespace codegen
       return;
     aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1.get());
     aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2.get());
-    aast::Stack *mov1_stack = nullptr, *mov2_stack = nullptr;
+
     if (src)
     {
-      aast::Stack *src_stack = replace_pseudo(src);
-      delete binary->operand1;
+      std::shared_ptr<aast::Stack> src_stack = replace_pseudo(src);
       binary->operand1 = src_stack;
     }
     if (dst)
     {
-      mov1_stack = replace_pseudo(dst);
-      mov2_stack = replace_pseudo(dst);
-
-      aast::R11 *r11_1 = new aast::R11(), *r11_2 = new aast::R11(), *r11_3 = new aast::R11();
-      aast::Reg *reg1 = new aast::Reg(r11_1), *reg2 = new aast::Reg(r11_2), *reg3 = new aast::Reg(r11_3);
-      aast::Mov *mov1 = new aast::Mov(mov1_stack, reg1); // copies address content into register
-      delete binary->operand2;
-      binary->operand2 = reg2; // multiplies constant by content in register
-      instructions.insert(it, mov1);
+      std::shared_ptr<aast::Stack> dst_stack = replace_pseudo(dst);
+      std::shared_ptr<aast::R11> r11 = std::make_shared<aast::R11>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(std::move(r11));
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(dst_stack, reg); // copies address content into register
+      binary->operand2 = reg;                                                       // multiplies constant by content in register
+      instructions.insert(it, std::move(mov));
       ++it;
 
-      aast::Mov *mov2 = new aast::Mov(reg3, mov2_stack); // copies register content to the original address;
-      it = instructions.insert(it, mov2);
+      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(reg, dst_stack); // copies register content to the original address;
+      it = instructions.insert(it, std::move(mov2));
     }
   }
 
   // This function assists in replacing pseudo variables for division and modulo operator
-  void fix_div(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  void fix_div(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
-    aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(*it);
+    aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(it->get());
     if (!idiv)
       return;
-    aast::Pseudo *pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand);
-    aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand);
+    aast::Pseudo *pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand.get());
+    aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand.get());
     if (pseudo)
     {
-      aast::Stack *stack = replace_pseudo(pseudo);
-      delete idiv->operand;
+      std::shared_ptr<aast::Stack> stack = replace_pseudo(pseudo);
       idiv->operand = stack;
     }
     else if (imm_val)
     {
-      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
-      aast::Reg *reg1 = new aast::Reg(r10_1), *reg2 = new aast::Reg(r10_2);
-      aast::Mov *mov = new aast::Mov(imm_val, reg1); // copies divisor into a register and then apply the division onto that register directly
+      std::shared_ptr<aast::R10> r10 = std::make_shared<aast::R10>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(r10);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(std::make_shared<aast::Imm>(imm_val->val), reg); // copies divisor into a register and then apply the division onto that register directly
       // delete idiv->operand; aast::Mov Instruction uses its immediate value so we can't delete
-      idiv->operand = reg2;
-      it = instructions.insert(it, mov);
+      idiv->operand = reg;
+      it = instructions.insert(it, std::move(mov));
     }
   }
 
   // This function assists in replacing pseudos for cmp as well as rearranging its operands
-  void fix_cmp(typename std::list<aast::Instruction *>::iterator &it, std::list<aast::Instruction *> &instructions)
+  void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions)
   {
-    aast::Cmp *cmp = dynamic_cast<aast::Cmp *>(*it);
+    aast::Cmp *cmp = dynamic_cast<aast::Cmp *>(it->get());
     if (!cmp)
       return;
-    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(cmp->operand1);
-    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(cmp->operand2);
-    aast::Stack *src_stack = nullptr,
-                *dst_stack = nullptr;
+    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(cmp->operand1.get());
+    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(cmp->operand2.get());
+    std::shared_ptr<aast::Stack> src_stack, dst_stack;
     if (operand1 && operand2)
     {
       src_stack = replace_pseudo(operand1);
       dst_stack = replace_pseudo(operand2);
 
-      aast::R10 *r10_1 = new aast::R10(), *r10_2 = new aast::R10();
-      aast::Reg *mov_reg = new aast::Reg(r10_1), *cmp_reg = new aast::Reg(r10_2);
-      delete cmp->operand1;
-      cmp->operand1 = cmp_reg;
-      delete cmp->operand2;
+      std::shared_ptr<aast::R10> r10 = std::make_shared<aast::R10>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(r10);
+      cmp->operand1 = reg;
       cmp->operand2 = dst_stack;
 
-      aast::Mov *mov = new aast::Mov(src_stack, mov_reg);
-      it = instructions.insert(it, mov);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg);
+      it = instructions.insert(it, std::move(mov));
     }
     else if (operand1)
     {
       src_stack = replace_pseudo(operand1);
-      delete cmp->operand1;
       cmp->operand1 = src_stack;
     }
     else if (operand2)
     {
       dst_stack = replace_pseudo(operand2);
-      delete cmp->operand2;
       cmp->operand2 = dst_stack;
     }
 
-    aast::Imm *dst = dynamic_cast<aast::Imm *>(cmp->operand2);
+    aast::Imm *dst = dynamic_cast<aast::Imm *>(cmp->operand2.get());
     if (dst)
     {
-      aast::R11 *r11_1 = new aast::R11(), *r11_2 = new aast::R11();
-      aast::Reg *mov_reg = new aast::Reg(r11_1), *cmp_reg = new aast::Reg(r11_2);
+      std::shared_ptr<aast::R11> r11 = std::make_shared<aast::R11>();
+      std::shared_ptr<aast::Reg> reg = std::make_shared<aast::Reg>(r11);
 
-      aast::Imm *mov_copy = new aast::Imm(dst->val);
-      aast::Mov *mov = new aast::Mov(mov_copy, mov_reg);
-      it = instructions.insert(it, mov);
+      std::shared_ptr<aast::Imm> mov_copy = std::make_shared<aast::Imm>(dst->val);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(mov_copy, reg);
+      it = instructions.insert(it, std::move(mov));
 
-      delete cmp->operand2;
-      cmp->operand2 = cmp_reg;
+      cmp->operand2 = reg;
     }
   }
 
   // This function handles setcc instructions with registers
-  void fix_set(typename std::list<aast::Instruction *>::iterator &it)
+  void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it)
   {
-    aast::SetCC *setcc = dynamic_cast<aast::SetCC *>(*it);
+    aast::SetCC *setcc = dynamic_cast<aast::SetCC *>(it->get());
     if (!setcc)
       return;
 
-    aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(setcc->operand);
+    aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(setcc->operand.get());
     if (operand)
     {
-      aast::Stack *stack = replace_pseudo(operand);
-      delete setcc->operand;
+      std::shared_ptr<aast::Stack> stack = replace_pseudo(operand);
       setcc->operand = stack;
     }
   }
