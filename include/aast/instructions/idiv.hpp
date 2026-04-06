@@ -10,7 +10,6 @@ namespace aast
   public:
     Operand *operand;
     Idiv(Operand *operand_) : operand(operand_) {}
-    ~Idiv() { delete operand; }
 
   protected:
     void write(std::ostream &ostr) const override

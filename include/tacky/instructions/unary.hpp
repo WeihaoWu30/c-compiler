@@ -13,13 +13,6 @@ namespace tacky
     ~Unary()
     {
       delete unary_operator;
-      delete src;
-      // delete dst;
-      /*
-      The return struct contains the final dst variable so we only need to
-      delete sources since it will clear each dst for us in the upcoming
-      instructions starting from the first instruction
-      */
     }
   };
 }

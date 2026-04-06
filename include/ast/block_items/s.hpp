@@ -13,6 +13,6 @@ namespace ast
       ~S() { delete statement; }
 
    protected:
-      void print(std::ostream &ostr) const override {};
+      void print(std::ostream &ostr) const override { ostr << std::endl; };
    };
 }

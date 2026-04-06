@@ -8,9 +8,5 @@ namespace tacky
   {
     Val *val;
     Return(Val *val_) : val(val_) {}
-    ~Return()
-    {
-      delete val;
-    }
   };
 }

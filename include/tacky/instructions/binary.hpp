@@ -13,9 +13,6 @@ namespace tacky
     ~Binary()
     {
       delete binary_operator;
-      delete src1;
-      delete src2;
-      // delete dst; Same reasoning as Unary
     }
   };
 }

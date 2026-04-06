@@ -17,6 +17,6 @@ namespace ast
       }
 
    protected:
-      void print(std::ostream &ostr) const override {};
+      void print(std::ostream &ostr) const override { ostr << std::endl; };
    };
 }

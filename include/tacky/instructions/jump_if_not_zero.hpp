@@ -12,7 +12,6 @@ namespace tacky
     JumpIfNotZero(Val *condition_, Identifier *target_) : condition(condition_), target(target_) {}
     ~JumpIfNotZero()
     {
-      delete condition;
       delete target;
     }
   };

@@ -17,7 +17,6 @@ namespace aast
     ~SetCC()
     {
       delete cond_code;
-      delete operand;
     }
 
   protected:

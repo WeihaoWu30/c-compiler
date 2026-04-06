@@ -10,11 +10,6 @@ namespace aast
   public:
     Operand *operand1, *operand2;
     Cmp(Operand *operand1_, Operand *operand2_) : operand1(operand1_), operand2(operand2_) {}
-    ~Cmp()
-    {
-      delete operand1;
-      delete operand2;
-    }
 
   protected:
     void write(std::ostream &ostr) const override
