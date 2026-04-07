@@ -13,6 +13,7 @@ namespace lexer
   std::vector<std::regex> patterns = {std::regex("int\\b"),
                                       std::regex("void\\b"),
                                       std::regex("return\\b"),
+                                      std::regex("typedef\\b"),
                                       std::regex("[0-9]+\\b"),
                                       std::regex("[a-zA-Z_]\\w*\\b"),
                                       std::regex("\\("),

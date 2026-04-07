@@ -2,11 +2,13 @@
 #include "compiler/parser.hpp"
 #include <cstdlib>
 #include <iostream>
-#include <list>
+#include <vector>
 #include <string>
 #include <unordered_set>
-#include <iterator>
+#include <unordered_map>
 #include <compiler/ir_gen.hpp>
+#include <memory>
+#include <utility>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
 
@@ -15,14 +17,15 @@ namespace parser
    // For Parsing Expressions
    std::unordered_set<std::string> binary_operators({"+", "-", "/", "%", "*", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "="});
    std::unordered_map<std::string, std::string> variable_map;
+   std::unordered_map<std::string, std::string> symbol_table;
 
    // This Function Matches A Token Against Legal Syntax
    void expect(std::string expected, std::list<std::string> &tokens)
    {
-      std::string actual(*tokens.begin());
+      std::string actual(tokens.front());
       if (actual == expected)
       {
-         tokens.erase(tokens.begin());
+         tokens.pop_front();
       }
       else
       {
@@ -30,6 +33,11 @@ namespace parser
                    << std::endl;
          exit(1);
       }
+   }
+
+   bool is_type(const std::string &token)
+   {
+      return token == "int" || symbol_table.count(token);
    }
 
    std::string make_temporary(std::string s)
@@ -40,8 +48,8 @@ namespace parser
    // This function ONLY matches the next token against a bitwise negate or bitwise complement
    ast::Unary_Operator *parse_unop(std::list<std::string> &tokens)
    {
-      std::string next_token(*tokens.begin());
-      tokens.erase(tokens.begin());
+      std::string next_token(tokens.front());
+      tokens.pop_front();
       ast::Unary_Operator *res = nullptr;
       if (next_token == "~")
       {
@@ -62,8 +70,8 @@ namespace parser
    // This function creates AST nodes for binary operators
    ast::Binary_Operator *parse_binop(std::list<std::string> &tokens)
    {
-      std::string next_token(*tokens.begin());
-      tokens.erase(tokens.begin());
+      std::string next_token(tokens.front());
+      tokens.pop_front();
       ast::Binary_Operator *res = nullptr;
       if (next_token == "+")
       {
@@ -142,33 +150,37 @@ namespace parser
    }
 
    // This function groups up expressions and orders them by precedence to create a recursive branch of Binary AST nodes
-   ast::Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec)
+   ast::Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
-      ast::Expression *left = parse_factor(tokens);
-      std::string next_token(*tokens.begin());
+      ast::Expression *left = parse_factor(tokens, expressions);
+      std::string next_token(tokens.front());
       ast::Expression *right;
       while (binary_operators.count(next_token) && precedence(next_token) >= min_prec)
       { // Ensures that we process preceeding operators first
          if (next_token == "=")
          {
             expect("=", tokens);
-            right = parse_expression(tokens, precedence(next_token));
-            left = new ast::Assignment(left, right);
+            right = parse_expression(tokens, precedence(next_token), expressions);
+            std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Assignment>(left, right);
+            expressions.push_back(std::move(unique_left));
+            left = expressions.back().get();
          }
          else
          {
             ast::Binary_Operator *binary_operator = parse_binop(tokens);
-            ast::Expression *right = parse_expression(tokens, precedence(next_token) + 1); // The +1 ensures we are grouping from the left side to the right side
-            left = new ast::Binary(binary_operator, left, right);
+            ast::Expression *right = parse_expression(tokens, precedence(next_token) + 1, expressions); // The +1 ensures we are grouping from the left side to the right side
+            std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Binary>(binary_operator, left, right);
+            expressions.push_back(std::move(unique_left));
+            left = expressions.back().get();
          }
-         next_token = *tokens.begin();
+         next_token = tokens.front();
       }
 
       return left;
    }
 
    // This recursive function Establishes Expression Nodes
-   ast::Expression *parse_factor(std::list<std::string> &tokens)
+   ast::Expression *parse_factor(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       if (tokens.empty())
          return nullptr; // REQUIRED BASE CASE
@@ -177,29 +189,32 @@ namespace parser
       std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
       if (*endptr == '\0')                          // valid integer
       {
-         ast::Constant *constant = new ast::Constant(std::stoi(next_token));
-         tokens.erase(tokens.begin());
-         return constant;
+         std::unique_ptr<ast::Constant> constant = std::make_unique<ast::Constant>(std::stoi(next_token));
+         expressions.push_back(std::move(constant));
+         tokens.pop_front();
+         return expressions.back().get();
       }
       else if (next_token == "~" || next_token == "-" || next_token == "!")
       {
          ast::Unary_Operator *unary_operator = parse_unop(tokens);
-         ast::Expression *inner_exp = parse_factor(tokens); // A Unary Expression Can contain another Unary Expression Whitin
-         ast::Unary *unop = new ast::Unary(unary_operator, inner_exp);
-         return unop;
+         ast::Expression *inner_exp = parse_factor(tokens, expressions); // A Unary Expression Can contain another Unary Expression Whitin
+         std::unique_ptr<ast::Unary> unop = std::make_unique<ast::Unary>(unary_operator, inner_exp);
+         expressions.push_back(std::move(unop));
+         return expressions.back().get();
       }
       else if (next_token == "(")
       { // Separating Unary Operators
-         tokens.erase(tokens.begin());
-         ast::Expression *inner_exp = parse_expression(tokens, 0);
+         tokens.pop_front();
+         ast::Expression *inner_exp = parse_expression(tokens, 0, expressions);
          expect(")", tokens);
          return inner_exp;
       }
-      else if (binary_operators.count(tokens.front()) == 0 && tokens.front() != "int")
+      else if (!binary_operators.count(tokens.front()) && tokens.front() != "int")
       {
-         ast::Var *variable = new ast::Var(new ast::Identifier(tokens.front()));
-         tokens.erase(tokens.begin());
-         return variable;
+         std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(new ast::Identifier(tokens.front()));
+         expressions.push_back(std::move(variable));
+         tokens.pop_front();
+         return expressions.back().get();
       }
       else
       {
@@ -213,12 +228,12 @@ namespace parser
    }
 
    // This function currently only handles return statements
-   ast::Statement *parse_statement(std::list<std::string> &tokens)
+   ast::Statement *parse_statement(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       if (tokens.front() == "return")
       {
          expect("return", tokens);
-         ast::Expression *return_val = parse_expression(tokens, 0);
+         ast::Expression *return_val = parse_expression(tokens, 0, expressions);
          expect(";", tokens);
          ast::Return *ret = new ast::Return(return_val);
          return ret;
@@ -231,7 +246,7 @@ namespace parser
       }
       else
       {
-         ast::Expression *exp = parse_expression(tokens, 0);
+         ast::Expression *exp = parse_expression(tokens, 0, expressions);
          ast::Expression_Statement *exp_statement = new ast::Expression_Statement(exp);
          expect(";", tokens);
          return exp_statement;
@@ -239,7 +254,7 @@ namespace parser
       return nullptr;
    }
 
-   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::string> &variable_map)
+   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
       ast::Var *var = dynamic_cast<ast::Var *>(e);
@@ -250,23 +265,29 @@ namespace parser
          {
             std::cerr << "Invalid lvalue" << std::endl;
          }
-         return new ast::Assignment(resolve_exp(assignment->lvalue, variable_map), resolve_exp(assignment->exp, variable_map));
+         ast::Expression *lvalue = resolve_exp(assignment->lvalue, variable_map, expressions);
+         ast::Expression *exp = resolve_exp(assignment->exp, variable_map, expressions);
+         std::unique_ptr<ast::Assignment> a = std::make_unique<ast::Assignment>(lvalue, exp);
+         expressions.push_back(std::move(a));
+         return expressions.back().get();
       }
       else if (var)
       {
-         if (variable_map.count(var->identifier->name) == 1)
+         if (variable_map.count(var->identifier->name))
          {
-            return new ast::Var(new ast::Identifier(variable_map.at(var->identifier->name)));
+            std::unique_ptr<ast::Var> v = std::make_unique<ast::Var>(new ast::Identifier(variable_map[var->identifier->name]));
+            expressions.push_back(std::move(v));
+            return expressions.back().get();
          }
          else
          {
             std::cerr << "Undeclared variable!" << std::endl;
          }
       }
-      return nullptr;
+      return e;
    }
 
-   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::string> &variable_map)
+   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       if (variable_map.count(declaration->name->name) == 1)
       {
@@ -275,25 +296,27 @@ namespace parser
       }
       std::string unique_name = make_temporary(declaration->name->name);
       variable_map[declaration->name->name] = unique_name;
+      ast::Expression *prev_init = declaration->init;
       if (declaration->init != nullptr)
       {
-         declaration->init = resolve_exp(declaration->init, variable_map);
+         prev_init = resolve_exp(declaration->init, variable_map, expressions);
       }
-      return new ast::Declaration(new ast::Identifier(unique_name), declaration->init);
+      ast::Declaration *resolved = new ast::Declaration(new ast::Identifier(unique_name), prev_init);
+      return resolved;
    }
 
-   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::string> &variable_map)
+   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Return *ret = dynamic_cast<ast::Return *>(statement);
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(statement);
       ast::Null *null = dynamic_cast<ast::Null *>(statement);
       if (ret)
       {
-         return new ast::Return(resolve_exp(ret->exp, variable_map));
+         return new ast::Return(resolve_exp(ret->exp, variable_map, expressions));
       }
       if (exp_statement)
       {
-         return new ast::Expression_Statement(resolve_exp(exp_statement->exp, variable_map));
+         return new ast::Expression_Statement(resolve_exp(exp_statement->exp, variable_map, expressions));
       }
       if (null)
       {
@@ -302,23 +325,44 @@ namespace parser
       return nullptr;
    }
 
-   ast::Block_Item *parse_block_item(std::list<std::string> &tokens)
+   std::unique_ptr<ast::Block_Item> parse_block_item(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
-      // std::cout << tokens.front() << std::endl;
-      ast::Var *variable;
-      ast::Declaration *declaration;
+      // handling typedef
+      if (tokens.front() == "typedef")
+      {
+         tokens.pop_front();
+         if (!is_type(tokens.front()))
+         {
+            std::cerr << "Not a valid type" << std::endl;
+            exit(1);
+         }
+
+         std::string data_type(tokens.front());
+         if (symbol_table.count(data_type))
+         { // handle nested typedef
+            data_type = symbol_table[data_type];
+         }
+         tokens.pop_front();
+
+         std::string alias(tokens.front());
+         tokens.pop_front();
+         symbol_table[alias] = data_type;
+
+         std::unique_ptr<ast::S> s = std::make_unique<ast::S>(new ast::Null());
+         return s;
+      }
       if (tokens.front() == "int")
       {
-         tokens.erase(tokens.begin());
+         tokens.pop_front();
+         ast::Identifier *variable_name;
+         ast::Declaration *declaration;
          char *endptr;
          std::strtol(tokens.front().c_str(), &endptr, 10); // parses decimal integers
          if (*endptr != '\0' && tokens.front() != "return")
          {
-
             std::string name(tokens.front());
-            tokens.erase(tokens.begin());
-            ast::Identifier *identifier = new ast::Identifier(name);
-            variable = new ast::Var(identifier);
+            tokens.pop_front();
+            variable_name = new ast::Identifier(name);
          }
          else
          {
@@ -328,13 +372,13 @@ namespace parser
          if (tokens.front() == "=")
          {
             expect("=", tokens);
-            ast::Expression *exp = parse_expression(tokens, 0);
-            declaration = new ast::Declaration(variable->identifier, exp);
+            ast::Expression *exp = parse_expression(tokens, 0, expressions);
+            declaration = new ast::Declaration(variable_name, exp);
             expect(";", tokens);
          }
          else if (tokens.front() == ";")
          {
-            declaration = new ast::Declaration(variable->identifier);
+            declaration = new ast::Declaration(variable_name);
             expect(";", tokens);
          }
          else
@@ -342,13 +386,18 @@ namespace parser
             std::cerr << "Not a valid block item" << std::endl;
             exit(1);
          }
-         ast::D *d = new ast::D(declaration);
+         ast::Declaration *resolved_declaration = resolve_declaration(declaration, variable_map, expressions);
+         std::unique_ptr<ast::D> d = std::make_unique<ast::D>(resolved_declaration);
+         delete declaration;
          return d;
       }
       else
       {
          // std::cout << tokens.front() << std::endl;
-         ast::S *s = new ast::S(parse_statement(tokens));
+         ast::Statement *unresolved_statement = parse_statement(tokens, expressions);
+         ast::Statement *resolved_statement = resolve_statement(unresolved_statement, variable_map, expressions);
+         std::unique_ptr<ast::S> s = std::make_unique<ast::S>(resolved_statement);
+         delete unresolved_statement;
          return s;
       }
    }
@@ -364,31 +413,31 @@ namespace parser
       expect(")", tokens);
       expect("{", tokens);
 
-      std::list<ast::Block_Item *> function_body;
+      std::vector<std::unique_ptr<ast::Block_Item>> function_body;
+      std::vector<std::unique_ptr<ast::Expression>> expressions;
       while (tokens.front() != "}")
       {
-         ast::Block_Item *next_block_item = parse_block_item(tokens);
-         function_body.push_back(next_block_item);
+         std::unique_ptr<ast::Block_Item> next_block_item = parse_block_item(tokens, expressions);
+         function_body.push_back(std::move(next_block_item));
       }
       expect("}", tokens);
-      ast::Function *func = new ast::Function(func_name, function_body);
+      ast::Function *func = new ast::Function(func_name, std::move(function_body), std::move(expressions));
       if (!tokens.empty())
       {
          std::cerr << "Extra Characters Found For Minimal Compiler" << std::endl;
          exit(1);
       }
+
+      variable_map.clear();
+      symbol_table.clear();
       return func;
    }
-
-   // This function is just to check AST structure
-   void pretty_print(const ast::Program *p) { std::cout << *p << std::endl; }
 
    // This function converts Tokens into AST Program node
    ast::Program *parse(std::list<std::string> &tokens)
    {
       ast::Function *function_definition = parse_function(tokens);
       ast::Program *program = new ast::Program(function_definition);
-      // pretty_print(program);
       return program;
    }
 }

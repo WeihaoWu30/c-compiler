@@ -261,11 +261,11 @@ namespace ir_gen
         std::vector<std::unique_ptr<tacky::Val>> values;
         ast::Identifier *a_identifier = func->name;
         tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
-        for (ast::Block_Item *&b : func->body)
+        for (std::unique_ptr<ast::Block_Item> &b : func->body)
         {
-            ast::D *d = dynamic_cast<ast::D *>(b);
-            ast::S *s = dynamic_cast<ast::S *>(b);
-            ast::Return *ret = dynamic_cast<ast::Return *>(b);
+            ast::D *d = dynamic_cast<ast::D *>(b.get());
+            ast::S *s = dynamic_cast<ast::S *>(b.get());
+            ast::Return *ret = dynamic_cast<ast::Return *>(b.get());
             if (d)
             {
                 if (d->declaration->init)
