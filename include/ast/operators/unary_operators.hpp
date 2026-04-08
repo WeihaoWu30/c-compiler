@@ -1,17 +1,13 @@
 #pragma once
-#include "ast/abstract/unary_operator.hpp"
+#include <cstdint>
 
 namespace ast
 {
-   struct Complement : Unary_Operator
+   enum class Unary_Operator : uint8_t
    {
-   };
-
-   struct Negate : Unary_Operator
-   {
-   };
-
-   struct Unary_Not : Unary_Operator
-   {
+      Complement,
+      Negate,
+      Not,
+      Invalid
    };
 }

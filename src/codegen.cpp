@@ -7,6 +7,7 @@
 #include <unordered_map>
 #include <memory>
 #include <utility>
+#include <algorithm>
 
 namespace codegen
 {
@@ -36,74 +37,66 @@ namespace codegen
   }
 
   // This function converts Tacky unary operators to assembly instructions for unary operators
-  aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator *unary_operator)
+  aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator unary_operator)
   {
-    tacky::Complement *t_complement = dynamic_cast<tacky::Complement *>(unary_operator);
-    tacky::Negate *t_negate = dynamic_cast<tacky::Negate *>(unary_operator);
-    tacky::Not *t_not = dynamic_cast<tacky::Not *>(unary_operator);
-    aast::Unary_Operator *res = nullptr;
-    if (t_complement)
+    switch (unary_operator)
     {
-      res = new aast::Not();
+    case tacky::Unary_Operator::Negate:
+      return new aast::Neg();
+    case tacky::Unary_Operator::Complement:
+    case tacky::Unary_Operator::Not:
+      return new aast::Not();
+    default:
+      return nullptr;
     }
-    else if (t_negate)
-    {
-      res = new aast::Neg();
-    }
-    else if (t_not)
-    {
-      res = new aast::Not();
-    }
-    return res;
   }
 
   // This function converts from TACKY to assembly Instructions for Binary Operators +, -, *
-  aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator *binary_operator)
+  aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator binary_operator)
   {
-    tacky::Add *t_add = dynamic_cast<tacky::Add *>(binary_operator);
-    tacky::Subtract *t_sub = dynamic_cast<tacky::Subtract *>(binary_operator);
-    tacky::Multiply *t_mult = dynamic_cast<tacky::Multiply *>(binary_operator);
-    aast::Binary_Operator *res = nullptr;
-    if (t_add)
+    switch (binary_operator)
     {
-      res = new aast::Add();
+    case tacky::Binary_Operator::Add:
+      return new aast::Add();
+    case tacky::Binary_Operator::Subtract:
+      return new aast::Sub();
+    case tacky::Binary_Operator::Multiply:
+      return new aast::Mult();
+    case tacky::Binary_Operator::BitAnd:
+      return new aast::And();
+    case tacky::Binary_Operator::BitOr:
+      return new aast::Or();
+    case tacky::Binary_Operator::BitXor:
+      return new aast::Xor();
+    case tacky::Binary_Operator::BitLeftShift:
+      return new aast::Shl();
+    case tacky::Binary_Operator::BitRightShift:
+      return new aast::Shr();
+    default:
+      return nullptr;
     }
-    else if (t_sub)
-    {
-      res = new aast::Sub();
-    }
-    else if (t_mult)
-    {
-      res = new aast::Mult();
-    }
-
-    return res;
   }
 
   // This function converts the relational operators into the assembly code
-  aast::Cond_Code *generate_conditional_codes(tacky::Binary_Operator *binary_operator)
+  aast::Cond_Code *generate_conditional_codes(tacky::Binary_Operator binary_operator)
   {
-    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(binary_operator);
-    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(binary_operator);
-    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(binary_operator);
-    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(binary_operator);
-    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(binary_operator);
-    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(binary_operator);
-    aast::Cond_Code *res = nullptr;
-    if (eq)
-      res = new aast::E();
-    else if (neq)
-      res = new aast::NE();
-    else if (lt)
-      res = new aast::L();
-    else if (lte)
-      res = new aast::LE();
-    else if (gt)
-      res = new aast::G();
-    else if (gte)
-      res = new aast::GE();
-
-    return res;
+    switch (binary_operator)
+    {
+    case tacky::Binary_Operator::Equal:
+      return new aast::E();
+    case tacky::Binary_Operator::NotEqual:
+      return new aast::NE();
+    case tacky::Binary_Operator::LessThan:
+      return new aast::L();
+    case tacky::Binary_Operator::LessOrEqual:
+      return new aast::LE();
+    case tacky::Binary_Operator::GreaterThan:
+      return new aast::G();
+    case tacky::Binary_Operator::GreaterOrEqual:
+      return new aast::GE();
+    default:
+      return nullptr;
+    }
   }
 
   // This function creates the assembly Return Instruction
@@ -130,8 +123,7 @@ namespace codegen
     tacky::Unary *t_unary = dynamic_cast<tacky::Unary *>(instruction);
     if (!t_unary)
       return;
-    tacky::Not *t_not = dynamic_cast<tacky::Not *>(t_unary->unary_operator);
-    if (t_not)
+    if (t_unary->unary_operator == tacky::Unary_Operator::Not)
     {
       aast::Operand *src = generate_operand(t_unary->src, operands);
       aast::Operand *dst = generate_operand(t_unary->dst, operands);
@@ -167,18 +159,7 @@ namespace codegen
     tacky::Binary *t_binary = dynamic_cast<tacky::Binary *>(instruction);
     if (!t_binary)
       return;
-    tacky::Add *add = dynamic_cast<tacky::Add *>(t_binary->binary_operator);
-    tacky::Subtract *subt = dynamic_cast<tacky::Subtract *>(t_binary->binary_operator);
-    tacky::Multiply *mult = dynamic_cast<tacky::Multiply *>(t_binary->binary_operator);
-    tacky::Divide *div = dynamic_cast<tacky::Divide *>(t_binary->binary_operator);
-    tacky::Remainder *remainder = dynamic_cast<tacky::Remainder *>(t_binary->binary_operator);
-    tacky::Equal *eq = dynamic_cast<tacky::Equal *>(t_binary->binary_operator);
-    tacky::NotEqual *neq = dynamic_cast<tacky::NotEqual *>(t_binary->binary_operator);
-    tacky::LessThan *lt = dynamic_cast<tacky::LessThan *>(t_binary->binary_operator);
-    tacky::LessOrEqual *lte = dynamic_cast<tacky::LessOrEqual *>(t_binary->binary_operator);
-    tacky::GreaterThan *gt = dynamic_cast<tacky::GreaterThan *>(t_binary->binary_operator);
-    tacky::GreaterOrEqual *gte = dynamic_cast<tacky::GreaterOrEqual *>(t_binary->binary_operator);
-    if (add || subt || mult)
+    if (std::find(basic_operators.begin(), basic_operators.end(), t_binary->binary_operator) != basic_operators.end())
     {
       aast::Operand *mov_src = generate_operand(t_binary->src1, operands);
       aast::Operand *dst = generate_operand(t_binary->dst, operands);
@@ -190,14 +171,14 @@ namespace codegen
       std::unique_ptr<aast::Binary> binary = std::make_unique<aast::Binary>(bin_op, bin_src, dst);
       assembly_instructions.push_back(std::move(binary));
     }
-    else if (div || remainder)
+    else if (std::find(complex_operators.begin(), complex_operators.end(), t_binary->binary_operator) != complex_operators.end())
     {
       aast::RegType *reg_type1 = new aast::AX(), *reg_type2 = nullptr;
-      if (div)
+      if (t_binary->binary_operator == tacky::Binary_Operator::Divide)
       {
         reg_type2 = new aast::AX(); // quotient goes in eax
       }
-      else if (remainder)
+      else if (t_binary->binary_operator == tacky::Binary_Operator::Remainder)
       {
         reg_type2 = new aast::DX(); // remainder goes int edx
       }
@@ -221,7 +202,7 @@ namespace codegen
       operands.push_back(std::move(mov_reg1));
       operands.push_back(std::move(mov_reg2));
     }
-    else if (eq || neq || lt || lte || gt || gte)
+    else if (std::find(logical_operators.begin(), logical_operators.end(), t_binary->binary_operator) != logical_operators.end())
     {
       aast::Operand *src1 = generate_operand(t_binary->src1, operands);
       aast::Operand *src2 = generate_operand(t_binary->src2, operands);

@@ -22,4 +22,9 @@ namespace aast
   {
     R11() { name = "%r11d"; }
   };
+
+  struct CL : RegType
+  {
+    CL() { name = "%cl"; }
+  }
 }

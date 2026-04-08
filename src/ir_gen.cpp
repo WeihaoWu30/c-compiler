@@ -19,89 +19,61 @@ namespace ir_gen
     }
 
     // This function converts from a AST Unary operator to TACKY unary operator
-    tacky::Unary_Operator *convert_unop(ast::Unary_Operator *exp)
+    tacky::Unary_Operator convert_unop(ast::Unary_Operator op)
     {
-        ast::Complement *complement = dynamic_cast<ast::Complement *>(exp);
-        ast::Negate *negate = dynamic_cast<ast::Negate *>(exp);
-        ast::Unary_Not *not_op = dynamic_cast<ast::Unary_Not *>(exp);
-        tacky::Unary_Operator *res = nullptr;
-        if (complement)
+        switch (op)
         {
-            res = new tacky::Complement();
+        case ast::Unary_Operator::Complement:
+            return tacky::Unary_Operator::Complement;
+        case ast::Unary_Operator::Negate:
+            return tacky::Unary_Operator::Negate;
+        case ast::Unary_Operator::Not:
+            return tacky::Unary_Operator::Not;
+        default:
+            return tacky::Unary_Operator::Invalid;
         }
-        else if (negate)
-        {
-            res = new tacky::Negate();
-        }
-        else if (not_op)
-        {
-            res = new tacky::Not();
-        }
-
-        return res;
     }
 
     // This function converts from a AST binary operator to TACKY operator
-    tacky::Binary_Operator *convert_binop(ast::Binary_Operator *op)
+    tacky::Binary_Operator convert_binop(ast::Binary_Operator op)
     {
-        tacky::Binary_Operator *res = nullptr;
-        ast::Add *add = dynamic_cast<ast::Add *>(op);
-        ast::Subtract *subtract = dynamic_cast<ast::Subtract *>(op);
-        ast::Multiply *multiply = dynamic_cast<ast::Multiply *>(op);
-        ast::Divide *divide = dynamic_cast<ast::Divide *>(op);
-        ast::Remainder *remainder = dynamic_cast<ast::Remainder *>(op);
-        ast::Equal *equal = dynamic_cast<ast::Equal *>(op);
-        ast::NotEqual *not_equal = dynamic_cast<ast::NotEqual *>(op);
-        ast::LessThan *less_than = dynamic_cast<ast::LessThan *>(op);
-        ast::LessOrEqual *less_or_equal = dynamic_cast<ast::LessOrEqual *>(op);
-        ast::GreaterThan *greater_than = dynamic_cast<ast::GreaterThan *>(op);
-        ast::GreaterOrEqual *greater_or_equal = dynamic_cast<ast::GreaterOrEqual *>(op);
-
-        if (add)
+        switch (op)
         {
-            res = new tacky::Add();
+        case ast::Binary_Operator::Add:
+            return tacky::Binary_Operator::Add;
+        case ast::Binary_Operator::Subtract:
+            return tacky::Binary_Operator::Subtract;
+        case ast::Binary_Operator::Multiply:
+            return tacky::Binary_Operator::Multiply;
+        case ast::Binary_Operator::Divide:
+            return tacky::Binary_Operator::Divide;
+        case ast::Binary_Operator::Remainder:
+            return tacky::Binary_Operator::Remainder;
+        case ast::Binary_Operator::Equal:
+            return tacky::Binary_Operator::Equal;
+        case ast::Binary_Operator::NotEqual:
+            return tacky::Binary_Operator::NotEqual;
+        case ast::Binary_Operator::LessThan:
+            return tacky::Binary_Operator::LessThan;
+        case ast::Binary_Operator::LessOrEqual:
+            return tacky::Binary_Operator::LessOrEqual;
+        case ast::Binary_Operator::GreaterThan:
+            return tacky::Binary_Operator::GreaterThan;
+        case ast::Binary_Operator::GreaterOrEqual:
+            return tacky::Binary_Operator::GreaterOrEqual;
+        case ast::Binary_Operator::BitAnd:
+            return tacky::Binary_Operator::BitAnd;
+        case ast::Binary_Operator::BitOr:
+            return tacky::Binary_Operator::BitOr;
+        case ast::Binary_Operator::BitXor:
+            return tacky::Binary_Operator::BitXor;
+        case ast::Binary_Operator::BitLeftShift:
+            return tacky::Binary_Operator::BitLeftShift;
+        case ast::Binary_Operator::BitRightShift:
+            return tacky::Binary_Operator::BitRightShift;
+        default:
+            return tacky::Binary_Operator::Invalid;
         }
-        else if (subtract)
-        {
-            res = new tacky::Subtract();
-        }
-        else if (multiply)
-        {
-            res = new tacky::Multiply();
-        }
-        else if (divide)
-        {
-            res = new tacky::Divide();
-        }
-        else if (remainder)
-        {
-            res = new tacky::Remainder();
-        }
-        else if (equal)
-        {
-            res = new tacky::Equal();
-        }
-        else if (not_equal)
-        {
-            res = new tacky::NotEqual();
-        }
-        else if (less_than)
-        {
-            res = new tacky::LessThan();
-        }
-        else if (less_or_equal)
-        {
-            res = new tacky::LessOrEqual();
-        }
-        else if (greater_than)
-        {
-            res = new tacky::GreaterThan();
-        }
-        else if (greater_or_equal)
-        {
-            res = new tacky::GreaterOrEqual();
-        }
-        return res;
     }
 
     // This function is recursive and converts AST expressions to Tacky Values
@@ -123,13 +95,13 @@ namespace ir_gen
             tacky::Val *src = emit_tacky(unary->exp, instructions, values);
             tacky::Identifier *dst_name = make_identifier();
             std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-            tacky::Unary_Operator *unary_operator = convert_unop(unary->unary_operator);
+            tacky::Unary_Operator unary_operator = convert_unop(unary->unary_operator);
             std::unique_ptr<tacky::Unary> new_unary = std::make_unique<tacky::Unary>(unary_operator, src, dst.get());
             instructions.push_back(std::move(new_unary));
             values.push_back(std::move(dst));
             return values.back().get();
         }
-        else if (binary && dynamic_cast<ast::And *>(binary->binary_operator))
+        else if (binary && binary->binary_operator == ast::Binary_Operator::And)
         {
             tacky::Val *left = emit_tacky(binary->left, instructions, values);
             tacky::Identifier *left_false_identifier = new tacky::Identifier("false" + std::to_string(label_counter++));
@@ -174,7 +146,7 @@ namespace ir_gen
             values.push_back(std::move(dst));
             return values.back().get();
         }
-        else if (binary && dynamic_cast<ast::Or *>(binary->binary_operator))
+        else if (binary && binary->binary_operator == ast::Binary_Operator::Or)
         {
             tacky::Val *left = emit_tacky(binary->left, instructions, values);
             tacky::Identifier *left_true_identifier = new tacky::Identifier("true" + std::to_string(label_counter++));
@@ -225,7 +197,7 @@ namespace ir_gen
             tacky::Val *src2 = emit_tacky(binary->right, instructions, values);
             tacky::Identifier *dst_name = make_identifier();
             std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-            tacky::Binary_Operator *binary_operator = convert_binop(binary->binary_operator);
+            tacky::Binary_Operator binary_operator = convert_binop(binary->binary_operator);
             std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, src1, src2, dst.get());
             values.push_back(std::move(dst));
             instructions.push_back(std::move(new_binary));

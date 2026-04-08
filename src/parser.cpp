@@ -4,7 +4,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <unordered_set>
+#include <array>
+#include <algorithm>
 #include <unordered_map>
 #include <compiler/ir_gen.hpp>
 #include <memory>
@@ -15,7 +16,6 @@
 namespace parser
 {
    // For Parsing Expressions
-   std::unordered_set<std::string> binary_operators({"+", "-", "/", "%", "*", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "="});
    std::unordered_map<std::string, std::string> variable_map;
    std::unordered_map<std::string, std::string> symbol_table;
 
@@ -46,100 +46,126 @@ namespace parser
    }
 
    // This function ONLY matches the next token against a bitwise negate or bitwise complement
-   ast::Unary_Operator *parse_unop(std::list<std::string> &tokens)
+   ast::Unary_Operator parse_unop(std::list<std::string> &tokens)
    {
       std::string next_token(tokens.front());
       tokens.pop_front();
-      ast::Unary_Operator *res = nullptr;
       if (next_token == "~")
       {
-         res = new ast::Complement();
+         return ast::Unary_Operator::Complement;
       }
       else if (next_token == "-")
       {
-         res = new ast::Negate();
+         return ast::Unary_Operator::Negate;
       }
       else if (next_token == "!")
       {
-         res = new ast::Unary_Not();
+         return ast::Unary_Operator::Not;
       }
 
-      return res;
+      return ast::Unary_Operator::Invalid;
    }
 
    // This function creates AST nodes for binary operators
-   ast::Binary_Operator *parse_binop(std::list<std::string> &tokens)
+   ast::Binary_Operator parse_binop(std::list<std::string> &tokens)
    {
       std::string next_token(tokens.front());
       tokens.pop_front();
-      ast::Binary_Operator *res = nullptr;
       if (next_token == "+")
       {
-         res = new ast::Add();
+         return ast::Binary_Operator::Add;
       }
       else if (next_token == "-")
       {
-         res = new ast::Subtract();
+         return ast::Binary_Operator::Subtract;
       }
       else if (next_token == "/")
       {
-         res = new ast::Divide();
+         return ast::Binary_Operator::Divide;
       }
       else if (next_token == "*")
       {
-         res = new ast::Multiply();
+         return ast::Binary_Operator::Multiply;
       }
       else if (next_token == "%")
       {
-         res = new ast::Remainder();
+         return ast::Binary_Operator::Remainder;
       }
       else if (next_token == "<")
       {
-         res = new ast::LessThan();
+         return ast::Binary_Operator::LessThan;
       }
       else if (next_token == "<=")
       {
-         res = new ast::LessOrEqual();
+         return ast::Binary_Operator::LessOrEqual;
       }
       else if (next_token == ">")
       {
-         res = new ast::GreaterThan();
+         return ast::Binary_Operator::GreaterThan;
       }
       else if (next_token == ">=")
       {
-         res = new ast::GreaterOrEqual();
+         return ast::Binary_Operator::GreaterOrEqual;
       }
       else if (next_token == "==")
       {
-         res = new ast::Equal();
+         return ast::Binary_Operator::Equal;
       }
       else if (next_token == "!=")
       {
-         res = new ast::NotEqual();
+         return ast::Binary_Operator::NotEqual;
       }
       else if (next_token == "&&")
       {
-         res = new ast::And();
+         return ast::Binary_Operator::And;
       }
       else if (next_token == "||")
       {
-         res = new ast::Or();
+         return ast::Binary_Operator::Or;
+      }
+      else if (next_token == "|")
+      {
+         return ast::Binary_Operator::BitOr;
+      }
+      else if (next_token == "&")
+      {
+         return ast::Binary_Operator::BitAnd;
+      }
+      else if (next_token == "^")
+      {
+         return ast::Binary_Operator::BitXor;
+      }
+      else if (next_token == ">>")
+      {
+         return ast::Binary_Operator::BitRightShift;
+      }
+      else if (next_token == "<<")
+      {
+         return ast::Binary_Operator::BitLeftShift;
       }
 
-      return res;
+      return ast::Binary_Operator::Invalid;
    }
 
    // This function hard codes each symbol's precedence values
    uint16_t precedence(const std::string &next_token)
    {
-      if (next_token == "+" || next_token == "-")
-         return 45;
-      else if (next_token == "*" || next_token == "/" || next_token == "%")
+      if (next_token == "*" || next_token == "/" || next_token == "%")
          return 50;
+      else if (next_token == "+" || next_token == "-")
+         return 45;
+      else if (next_token == "<<" || next_token == ">>")
+         return 40;
       else if (next_token == "<" || next_token == "<=" || next_token == ">" || next_token == ">=")
          return 35;
       else if (next_token == "==" || next_token == "!=")
          return 30;
+      else if (next_token == "&")
+         return 25;
+      else if (next_token == "^")
+         return 20;
+      else if (next_token == "|")
+         return 15;
       else if (next_token == "&&")
          return 10;
       else if (next_token == "||")
@@ -155,7 +181,7 @@ namespace parser
       ast::Expression *left = parse_factor(tokens, expressions);
       std::string next_token(tokens.front());
       ast::Expression *right;
-      while (binary_operators.count(next_token) && precedence(next_token) >= min_prec)
+      while (std::find(binary_operators.begin(), binary_operators.end(), next_token) != binary_operators.end() && precedence(next_token) >= min_prec)
       { // Ensures that we process preceeding operators first
          if (next_token == "=")
          {
@@ -167,7 +193,7 @@ namespace parser
          }
          else
          {
-            ast::Binary_Operator *binary_operator = parse_binop(tokens);
+            ast::Binary_Operator binary_operator = parse_binop(tokens);
             ast::Expression *right = parse_expression(tokens, precedence(next_token) + 1, expressions); // The +1 ensures we are grouping from the left side to the right side
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Binary>(binary_operator, left, right);
             expressions.push_back(std::move(unique_left));
@@ -196,7 +222,7 @@ namespace parser
       }
       else if (next_token == "~" || next_token == "-" || next_token == "!")
       {
-         ast::Unary_Operator *unary_operator = parse_unop(tokens);
+         ast::Unary_Operator unary_operator = parse_unop(tokens);
          ast::Expression *inner_exp = parse_factor(tokens, expressions); // A Unary Expression Can contain another Unary Expression Whitin
          std::unique_ptr<ast::Unary> unop = std::make_unique<ast::Unary>(unary_operator, inner_exp);
          expressions.push_back(std::move(unop));
@@ -209,7 +235,7 @@ namespace parser
          expect(")", tokens);
          return inner_exp;
       }
-      else if (!binary_operators.count(tokens.front()) && tokens.front() != "int")
+      else if (std::find(binary_operators.begin(), binary_operators.end(), tokens.front()) == binary_operators.end() && tokens.front() != "int")
       {
          std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(new ast::Identifier(tokens.front()));
          expressions.push_back(std::move(variable));

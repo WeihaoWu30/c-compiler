@@ -1,57 +1,28 @@
 #pragma once
-#include "ast/abstract/binary_operator.hpp"
+#include <cstdint>
 
 namespace ast
 {
-    struct Add : Binary_Operator
+    enum class Binary_Operator : uint8_t
     {
-    };
-
-    struct Subtract : Binary_Operator
-    {
-    };
-
-    struct Multiply : Binary_Operator
-    {
-    };
-
-    struct Divide : Binary_Operator
-    {
-    };
-
-    struct Remainder : Binary_Operator
-    {
-    };
-
-    struct And : Binary_Operator
-    {
-    };
-
-    struct Or : Binary_Operator
-    {
-    };
-
-    struct Equal : Binary_Operator
-    {
-    };
-
-    struct NotEqual : Binary_Operator
-    {
-    };
-
-    struct LessThan : Binary_Operator
-    {
-    };
-
-    struct LessOrEqual : Binary_Operator
-    {
-    };
-
-    struct GreaterThan : Binary_Operator
-    {
-    };
-
-    struct GreaterOrEqual : Binary_Operator
-    {
+        Add,
+        Subtract,
+        Multiply,
+        Divide,
+        Remainder,
+        And,
+        Or,
+        Equal,
+        NotEqual,
+        LessThan,
+        LessOrEqual,
+        GreaterThan,
+        GreaterOrEqual,
+        BitAnd,
+        BitOr,
+        BitXor,
+        BitRightShift,
+        BitLeftShift,
+        Invalid
     };
 }
