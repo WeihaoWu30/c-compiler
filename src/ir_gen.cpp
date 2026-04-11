@@ -218,7 +218,8 @@ namespace ir_gen
                 tacky::Val *result = emit_tacky(assignment->exp, instructions, values);
                 tacky::Identifier *identifer = new tacky::Identifier(v->identifier->name);
                 std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(identifer);
-                instructions.push_back(std::make_unique<tacky::Copy>(result, variable.get()));
+                std::unique_ptr<tacky::Copy> copy = std::make_unique<tacky::Copy>(result, variable.get());
+                instructions.push_back(std::move(copy));
                 values.push_back(std::move(variable));
                 return values.back().get();
             }
@@ -237,7 +238,6 @@ namespace ir_gen
         {
             ast::D *d = dynamic_cast<ast::D *>(b.get());
             ast::S *s = dynamic_cast<ast::S *>(b.get());
-            ast::Return *ret = dynamic_cast<ast::Return *>(b.get());
             if (d)
             {
                 if (d->declaration->init)
@@ -247,17 +247,18 @@ namespace ir_gen
             }
             else if (s)
             {
-                ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
+                ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
+                ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
                 if (exp_statement)
                 {
                     emit_tacky(exp_statement->exp, instructions, values);
                 }
-            }
-            else if (ret)
-            {
-                std::unique_ptr<tacky::Return> t_return = std::make_unique<tacky::Return>(emit_tacky(ret->exp, instructions, values));
-                instructions.push_back(std::move(t_return));
-                return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
+                else if (ret)
+                {
+                    std::unique_ptr<tacky::Return> t_return = std::make_unique<tacky::Return>(emit_tacky(ret->exp, instructions, values));
+                    instructions.push_back(std::move(t_return));
+                    return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
+                }
             }
         }
         std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);

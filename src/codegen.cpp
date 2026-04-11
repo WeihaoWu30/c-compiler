@@ -71,7 +71,7 @@ namespace codegen
     case tacky::Binary_Operator::BitLeftShift:
       return new aast::Shl();
     case tacky::Binary_Operator::BitRightShift:
-      return new aast::Shr();
+      return new aast::Sar();
     default:
       return nullptr;
     }
@@ -106,12 +106,11 @@ namespace codegen
     if (!t_return)
       return;
     aast::Operand *val = generate_operand(t_return->val, operands);
-    aast::AX *ax_register = new aast::AX();
-    std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(ax_register);
+    std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::DWORD);
     std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(val, reg.get());
     assembly_instructions.push_back(std::move(mov));
 
-    std::unique_ptr<aast::Ret> ret = std::unique_ptr<aast::Ret>();
+    std::unique_ptr<aast::Ret> ret = std::make_unique<aast::Ret>();
     assembly_instructions.push_back(std::move(ret));
 
     operands.push_back(std::move(reg));
@@ -173,16 +172,7 @@ namespace codegen
     }
     else if (std::find(complex_operators.begin(), complex_operators.end(), t_binary->binary_operator) != complex_operators.end())
     {
-      aast::RegType *reg_type1 = new aast::AX(), *reg_type2 = nullptr;
-      if (t_binary->binary_operator == tacky::Binary_Operator::Divide)
-      {
-        reg_type2 = new aast::AX(); // quotient goes in eax
-      }
-      else if (t_binary->binary_operator == tacky::Binary_Operator::Remainder)
-      {
-        reg_type2 = new aast::DX(); // remainder goes int edx
-      }
-      std::unique_ptr<aast::Reg> mov_reg1 = std::make_unique<aast::Reg>(reg_type1);
+      std::unique_ptr<aast::Reg> mov_reg1 = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::DWORD);
 
       aast::Operand *mov_src = generate_operand(t_binary->src1, operands); // dividend
       std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(mov_src, mov_reg1.get());
@@ -195,7 +185,16 @@ namespace codegen
       std::unique_ptr<aast::Idiv> idiv = std::make_unique<aast::Idiv>(div_src);
       assembly_instructions.push_back(std::move(idiv));
 
-      std::unique_ptr<aast::Reg> mov_reg2 = std::make_unique<aast::Reg>(reg_type2);
+      std::unique_ptr<aast::Reg> mov_reg2;
+      if (t_binary->binary_operator == tacky::Binary_Operator::Divide)
+      {
+        mov_reg2 = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::DWORD); // quotient goes in eax
+      }
+      else if (t_binary->binary_operator == tacky::Binary_Operator::Remainder)
+      {
+        mov_reg2 = std::make_unique<aast::Reg>(aast::RegType::DX, aast::Size::DWORD); // remainder goes int edx
+      }
+
       aast::Operand *mov_dst = generate_operand(t_binary->dst, operands);
       std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(mov_reg2.get(), mov_dst); // copy register value to address
       assembly_instructions.push_back(std::move(mov2));
@@ -335,8 +334,7 @@ namespace codegen
       src_stack = replace_pseudo(src, operands);
       dst_stack = replace_pseudo(dst, operands);
 
-      aast::R10 *r10 = new aast::R10();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r10);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(src_stack, reg.get()); // copies src to register
 
       // delete mov->src;
@@ -375,6 +373,50 @@ namespace codegen
     }
   }
 
+  void fix_shifting(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  {
+    aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
+    if (!binary)
+      return;
+    aast::Shl *shl = dynamic_cast<aast::Shl *>(binary->binary_operator);
+    aast::Sar *sar = dynamic_cast<aast::Sar *>(binary->binary_operator);
+    if (!shl && !sar)
+      return;
+
+    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    if (operand1)
+    {
+      aast::Stack *src_stack = replace_pseudo(operand1, operands);
+      std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::DWORD);
+      std::unique_ptr<aast::Reg> reg2 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::BYTE);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg1.get());
+      binary->operand1 = reg2.get();
+      operands.push_back(std::move(reg1));
+      operands.push_back(std::move(reg2));
+
+      it = instructions.insert(it, std::move(mov));
+    }
+    if (operand2)
+    {
+      aast::Stack *dst_stack = replace_pseudo(operand2, operands);
+      binary->operand2 = dst_stack;
+    }
+
+    aast::Reg *reg = dynamic_cast<aast::Reg *>(binary->operand1);
+    if (reg && reg->reg_size != aast::Size::BYTE && reg->reg_type != aast::RegType::CX)
+    {
+      std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::DWORD);
+      std::unique_ptr<aast::Reg> reg2 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::BYTE);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(reg, reg1.get());
+      binary->operand1 = reg2.get();
+      operands.push_back(std::move(reg1));
+      operands.push_back(std::move(reg2));
+
+      it = instructions.insert(it, std::move(mov));
+    }
+  }
+
   // This function assists in replacing pseudo variables for addiiton and subtraction operators
   void fix_add_sub(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
   {
@@ -392,8 +434,7 @@ namespace codegen
       src_stack = replace_pseudo(operand1, operands);
       dst_stack = replace_pseudo(operand2, operands);
 
-      aast::R10 *r10 = new aast::R10();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r10);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
 
       // delete binary->operand1;
@@ -419,8 +460,7 @@ namespace codegen
     aast::Imm *dst = dynamic_cast<aast::Imm *>(binary->operand2);
     if (dst)
     {
-      aast::R11 *r11 = new aast::R11();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r11);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
       // delete binary->operand2;
       binary->operand2 = reg.get();
 
@@ -452,8 +492,7 @@ namespace codegen
     {
       aast::Stack *dst_stack = replace_pseudo(dst, operands);
 
-      aast::R11 *r11 = new aast::R11();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r11);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst_stack, reg.get()); // copies address content into register
       // delete binary->operand2;
       binary->operand2 = reg.get(); // multiplies constant by content in register
@@ -483,8 +522,7 @@ namespace codegen
     }
     else if (imm_val)
     {
-      aast::R10 *r10 = new aast::R10();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r10);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm_val, reg.get()); // copies divisor into a register and then apply the division onto that register directly
       // delete idiv->operand; aast::Mov Instruction uses its immediate value so we can't delete
       idiv->operand = reg.get();
@@ -508,8 +546,7 @@ namespace codegen
       src_stack = replace_pseudo(operand1, operands);
       dst_stack = replace_pseudo(operand2, operands);
 
-      aast::R10 *r10 = new aast::R10();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r10);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       // delete cmp->operand1;
       cmp->operand1 = reg.get();
       // delete cmp->operand2;
@@ -536,8 +573,7 @@ namespace codegen
     aast::Imm *dst = dynamic_cast<aast::Imm *>(cmp->operand2);
     if (dst)
     {
-      aast::R11 *r11 = new aast::R11();
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(r11);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
 
       std::unique_ptr<aast::Imm> mov_copy = std::make_unique<aast::Imm>(dst->val);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(mov_copy.get(), reg.get());
@@ -557,12 +593,10 @@ namespace codegen
     aast::SetCC *setcc = dynamic_cast<aast::SetCC *>(it->get());
     if (!setcc)
       return;
-
     aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(setcc->operand);
     if (operand)
     {
       aast::Stack *stack = replace_pseudo(operand, operands);
-      // delete setcc->operand;
       setcc->operand = stack;
     }
   }
@@ -575,6 +609,7 @@ namespace codegen
     {
       fix_mov(it, instructions, operands);
       fix_unary(it, operands);
+      fix_shifting(it, instructions, operands);
       fix_cmp(it, instructions, operands);
       fix_set(it, operands);
       fix_mult(it, instructions, operands);

@@ -10,6 +10,7 @@
 #include <compiler/ir_gen.hpp>
 #include <memory>
 #include <utility>
+#include <iterator>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
 
@@ -188,8 +189,8 @@ namespace parser
             expect("=", tokens);
             right = parse_expression(tokens, precedence(next_token), expressions);
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Assignment>(left, right);
+            left = unique_left.get();
             expressions.push_back(std::move(unique_left));
-            left = expressions.back().get();
          }
          else
          {
@@ -210,7 +211,7 @@ namespace parser
    {
       if (tokens.empty())
          return nullptr; // REQUIRED BASE CASE
-      std::string next_token(*tokens.begin());
+      std::string next_token(tokens.front());
       char *endptr;
       std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
       if (*endptr == '\0')                          // valid integer
@@ -235,9 +236,9 @@ namespace parser
          expect(")", tokens);
          return inner_exp;
       }
-      else if (std::find(binary_operators.begin(), binary_operators.end(), tokens.front()) == binary_operators.end() && tokens.front() != "int")
+      else if (std::find(binary_operators.begin(), binary_operators.end(), next_token) == binary_operators.end() && tokens.front() != "int")
       {
-         std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(new ast::Identifier(tokens.front()));
+         std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(new ast::Identifier(next_token));
          expressions.push_back(std::move(variable));
          tokens.pop_front();
          return expressions.back().get();
@@ -283,6 +284,8 @@ namespace parser
    ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
+      ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
+      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
       ast::Var *var = dynamic_cast<ast::Var *>(e);
       if (assignment)
       {
@@ -290,11 +293,27 @@ namespace parser
          if (!var_node)
          {
             std::cerr << "Invalid lvalue" << std::endl;
+            exit(1);
          }
          ast::Expression *lvalue = resolve_exp(assignment->lvalue, variable_map, expressions);
          ast::Expression *exp = resolve_exp(assignment->exp, variable_map, expressions);
          std::unique_ptr<ast::Assignment> a = std::make_unique<ast::Assignment>(lvalue, exp);
          expressions.push_back(std::move(a));
+         return expressions.back().get();
+      }
+      else if (binary)
+      {
+         ast::Expression *left = resolve_exp(binary->left, variable_map, expressions);
+         ast::Expression *right = resolve_exp(binary->right, variable_map, expressions);
+         std::unique_ptr<ast::Binary> b = std::make_unique<ast::Binary>(binary->binary_operator, left, right);
+         expressions.push_back(std::move(b));
+         return expressions.back().get();
+      }
+      else if (unary)
+      {
+         ast::Expression *exp = resolve_exp(unary->exp, variable_map, expressions);
+         std::unique_ptr<ast::Unary> u = std::make_unique<ast::Unary>(unary->unary_operator, exp);
+         expressions.push_back(std::move(u));
          return expressions.back().get();
       }
       else if (var)
@@ -308,6 +327,7 @@ namespace parser
          else
          {
             std::cerr << "Undeclared variable!" << std::endl;
+            exit(1);
          }
       }
       return e;
@@ -384,10 +404,16 @@ namespace parser
          ast::Declaration *declaration;
          char *endptr;
          std::strtol(tokens.front().c_str(), &endptr, 10); // parses decimal integers
+         if (std::next(tokens.begin()) == tokens.end())
+         {
+            std::cerr << "Missing semicolon" << std::endl;
+            exit(1);
+         }
+         std::string variable_declaration(*std::next(tokens.begin()));
          if (*endptr != '\0' && tokens.front() != "return")
          {
             std::string name(tokens.front());
-            tokens.pop_front();
+            // tokens.pop_front();
             variable_name = new ast::Identifier(name);
          }
          else
@@ -395,15 +421,16 @@ namespace parser
             std::cerr << "Not a valid variable name" << std::endl;
             exit(1);
          }
-         if (tokens.front() == "=")
+         if (variable_declaration == "=")
          {
-            expect("=", tokens);
+            // expect("=", tokens);
             ast::Expression *exp = parse_expression(tokens, 0, expressions);
             declaration = new ast::Declaration(variable_name, exp);
             expect(";", tokens);
          }
-         else if (tokens.front() == ";")
+         else if (variable_declaration == ";")
          {
+            tokens.pop_front();
             declaration = new ast::Declaration(variable_name);
             expect(";", tokens);
          }
