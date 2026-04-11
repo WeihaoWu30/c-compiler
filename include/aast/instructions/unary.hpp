@@ -15,7 +15,6 @@ namespace aast
     ~Unary()
     {
       delete unary_operator;
-      delete operand;
     }
 
   protected:

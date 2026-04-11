@@ -5,9 +5,6 @@ namespace ast
 {
    struct Null : Statement
    {
-   public:
       Null() {};
-   protected:
-      void print(std::ostream &ostr) const override {};
    };
 }

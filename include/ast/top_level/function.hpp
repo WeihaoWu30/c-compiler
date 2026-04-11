@@ -3,23 +3,22 @@
 #include "ast/top_level/identifier.hpp"
 #include "ast/abstract/statement.hpp"
 #include "ast/abstract/block_item.hpp"
-#include <list>
+#include "ast/abstract/expression.hpp"
+#include <vector>
+#include <memory>
+#include <utility>
 
 namespace ast
 {
    struct Function
    {
       Identifier *name;
-      std::list<Block_Item *> body;
-      Function(Identifier *name_, std::list<Block_Item *> &body_) : name(name_), body(body_) {}
+      std::vector<std::unique_ptr<Block_Item>> body;
+      std::vector<std::unique_ptr<Expression>> exprs;
+      Function(Identifier *name_, std::vector<std::unique_ptr<Block_Item>> body_, std::vector<std::unique_ptr<Expression>> exprs_) : name(name_), body(std::move(body_)), exprs(std::move(exprs_)) {}
       ~Function()
       {
          delete name;
-         for (Block_Item *b : body)
-         {
-            delete b;
-         }
       }
-      friend std::ostream &operator<<(std::ostream &ostr, const Function &function);
    };
 }

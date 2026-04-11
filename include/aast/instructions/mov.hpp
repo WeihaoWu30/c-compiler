@@ -10,11 +10,6 @@ namespace aast
   public:
     Operand *src, *dst;
     Mov(Operand *src_, Operand *dst_) : src(src_), dst(dst_) {}
-    ~Mov()
-    {
-      delete src;
-      delete dst;
-    }
 
   protected:
     void write(std::ostream &ostr) const override

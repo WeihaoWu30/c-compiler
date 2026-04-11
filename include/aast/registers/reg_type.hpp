@@ -1,25 +1,67 @@
 #pragma once
-#include "aast/abstract/reg_type.hpp"
+#include <string>
 
 namespace aast
 {
-  struct AX : RegType
+  enum class RegType
   {
-    AX() { name = "%eax"; }
+    AX,
+    CX,
+    DX,
+    R10,
+    R11
   };
 
-  struct R10 : RegType
+  enum class Size
   {
-    R10() { name = "%r10d"; }
+    BYTE,
+    DWORD
   };
 
-  struct DX : RegType
+  inline std::string assembly_match(RegType regtype_, Size size_)
   {
-    DX() { name = "%edx"; }
-  };
-
-  struct R11 : RegType
-  {
-    R11() { name = "%r11d"; }
-  };
+    switch (regtype_)
+    {
+    case RegType::AX:
+      switch (size_)
+      {
+      case Size::BYTE:
+        return "%al";
+      case Size::DWORD:
+        return "%eax";
+      }
+    case RegType::DX:
+      switch (size_)
+      {
+      case Size::BYTE:
+        return "%dl";
+      case Size::DWORD:
+        return "%edx";
+      }
+    case RegType::R10:
+      switch (size_)
+      {
+      case Size::BYTE:
+        return "%r10b";
+      case Size::DWORD:
+        return "%r10d";
+      }
+    case RegType::R11:
+      switch (size_)
+      {
+      case Size::BYTE:
+        return "%r11b";
+      case Size::DWORD:
+        return "%r11d";
+      }
+    case RegType::CX:
+      switch (size_)
+      {
+      case Size::BYTE:
+        return "%cl";
+      case Size::DWORD:
+        return "%ecx";
+      }
+    }
+  }
 }

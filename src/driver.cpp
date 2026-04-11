@@ -16,7 +16,6 @@
 
 // Prototyping
 void preprocess(char *filename);
-void destroy(ast::Program *&program, aast::Program *&assembly_program, tacky::Program *&tacky_program);
 void cleanup();
 void execute(const char *filename);
 int main(int argc, char *argv[]);
@@ -36,14 +35,6 @@ void preprocess(char *filename)
   {
     wait(nullptr);
   }
-}
-
-// This Function Simply just frees the memory from every stage of the compiler
-void destroy(ast::Program *&program, aast::Program *&assembly_program, tacky::Program *&tacky_program)
-{
-  delete program;
-  delete assembly_program;
-  delete tacky_program;
 }
 
 // This function removes the intermediate files
@@ -94,6 +85,7 @@ int main(int argc, char *argv[])
     if (s.compare("--parse") == 0)
     {
       program = parser::parse(tokens);
+      delete program;
     }
     else if (s.compare("--validate") == 0)
     {
@@ -103,12 +95,17 @@ int main(int argc, char *argv[])
     {
       program = parser::parse(tokens);
       tacky_program = ir_gen::generate_tacky(program);
+      delete program;
+      delete tacky_program;
     }
     else if (s.compare("--codegen") == 0)
     {
       program = parser::parse(tokens);
       tacky_program = ir_gen::generate_tacky(program);
+      delete program;
       assembly_program = codegen::generate_top_level(tacky_program);
+      delete tacky_program;
+      delete assembly_program;
     }
   }
   else
@@ -116,8 +113,10 @@ int main(int argc, char *argv[])
     preprocess(argv[1]);
     tokens = lexer::lex(PPF);
     program = parser::parse(tokens);
-   //  tacky_program = ir_gen::generate_tacky(program);
+    tacky_program = ir_gen::generate_tacky(program);
+    delete program;
     assembly_program = codegen::generate_top_level(tacky_program);
+    delete tacky_program;
     std::ofstream ostr(AF);
     if (!ostr)
     {
@@ -128,12 +127,15 @@ int main(int argc, char *argv[])
     ostr << *(assembly_program); // Writing Assembly To File using Output Stream Extraction Operator Overloading
     ostr.close();
 
+    delete assembly_program;
+
     // This is just for the test cases to pass
     std::string s(argv[1]);
     s.erase(s.size() - 2);
     execute(s.c_str());
+#ifndef DEBUG
     cleanup();
+#endif
   }
-  destroy(program, assembly_program, tacky_program);
   return 0;
 }

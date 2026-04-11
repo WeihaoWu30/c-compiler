@@ -1,6 +1,6 @@
 # Makefile to run the compiler under x86_64 architecture
 
-.PHONY: term setup clean compile
+.PHONY: term setup clean compile debug
 
 term:
 	@arch -x86_64 /bin/zsh
@@ -14,6 +14,9 @@ clean:
 
 compile: 
 	@g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g
+
+debug:
+	@g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g -DDEBUG
 
 
 

@@ -8,10 +8,5 @@ namespace tacky
   {
     Val *src, *dst;
     Copy(Val *src_, Val *dst_) : src(src_), dst(dst_) {}
-    ~Copy()
-    {
-      delete src;
-      delete dst;
-    }
   };
 }

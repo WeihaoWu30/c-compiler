@@ -3,8 +3,8 @@
 #include "compiler/ir_gen.hpp"
 #include <vector>
 #include <string>
-#include <iostream>
-
+#include <memory>
+#include <utility>
 
 namespace ir_gen
 {
@@ -19,216 +19,209 @@ namespace ir_gen
     }
 
     // This function converts from a AST Unary operator to TACKY unary operator
-    tacky::Unary_Operator *convert_unop(ast::Unary_Operator *exp)
+    tacky::Unary_Operator convert_unop(ast::Unary_Operator op)
     {
-        ast::Complement *complement = dynamic_cast<ast::Complement *>(exp);
-        ast::Negate *negate = dynamic_cast<ast::Negate *>(exp);
-        ast::Unary_Not *not_op = dynamic_cast<ast::Unary_Not *>(exp);
-        tacky::Unary_Operator *res = nullptr;
-        if (complement)
+        switch (op)
         {
-            res = new tacky::Complement();
+        case ast::Unary_Operator::Complement:
+            return tacky::Unary_Operator::Complement;
+        case ast::Unary_Operator::Negate:
+            return tacky::Unary_Operator::Negate;
+        case ast::Unary_Operator::Not:
+            return tacky::Unary_Operator::Not;
+        default:
+            return tacky::Unary_Operator::Invalid;
         }
-        else if (negate)
-        {
-            res = new tacky::Negate();
-        }
-        else if (not_op)
-        {
-            res = new tacky::Not();
-        }
-
-        return res;
     }
 
     // This function converts from a AST binary operator to TACKY operator
-    tacky::Binary_Operator *convert_binop(ast::Binary_Operator *op)
+    tacky::Binary_Operator convert_binop(ast::Binary_Operator op)
     {
-        tacky::Binary_Operator *res = nullptr;
-        ast::Add *add = dynamic_cast<ast::Add *>(op);
-        ast::Subtract *subtract = dynamic_cast<ast::Subtract *>(op);
-        ast::Multiply *multiply = dynamic_cast<ast::Multiply *>(op);
-        ast::Divide *divide = dynamic_cast<ast::Divide *>(op);
-        ast::Remainder *remainder = dynamic_cast<ast::Remainder *>(op);
-        ast::Equal *equal = dynamic_cast<ast::Equal *>(op);
-        ast::NotEqual *not_equal = dynamic_cast<ast::NotEqual *>(op);
-        ast::LessThan *less_than = dynamic_cast<ast::LessThan *>(op);
-        ast::LessOrEqual *less_or_equal = dynamic_cast<ast::LessOrEqual *>(op);
-        ast::GreaterThan *greater_than = dynamic_cast<ast::GreaterThan *>(op);
-        ast::GreaterOrEqual *greater_or_equal = dynamic_cast<ast::GreaterOrEqual *>(op);
-
-        if (add)
+        switch (op)
         {
-            res = new tacky::Add();
+        case ast::Binary_Operator::Add:
+            return tacky::Binary_Operator::Add;
+        case ast::Binary_Operator::Subtract:
+            return tacky::Binary_Operator::Subtract;
+        case ast::Binary_Operator::Multiply:
+            return tacky::Binary_Operator::Multiply;
+        case ast::Binary_Operator::Divide:
+            return tacky::Binary_Operator::Divide;
+        case ast::Binary_Operator::Remainder:
+            return tacky::Binary_Operator::Remainder;
+        case ast::Binary_Operator::Equal:
+            return tacky::Binary_Operator::Equal;
+        case ast::Binary_Operator::NotEqual:
+            return tacky::Binary_Operator::NotEqual;
+        case ast::Binary_Operator::LessThan:
+            return tacky::Binary_Operator::LessThan;
+        case ast::Binary_Operator::LessOrEqual:
+            return tacky::Binary_Operator::LessOrEqual;
+        case ast::Binary_Operator::GreaterThan:
+            return tacky::Binary_Operator::GreaterThan;
+        case ast::Binary_Operator::GreaterOrEqual:
+            return tacky::Binary_Operator::GreaterOrEqual;
+        case ast::Binary_Operator::BitAnd:
+            return tacky::Binary_Operator::BitAnd;
+        case ast::Binary_Operator::BitOr:
+            return tacky::Binary_Operator::BitOr;
+        case ast::Binary_Operator::BitXor:
+            return tacky::Binary_Operator::BitXor;
+        case ast::Binary_Operator::BitLeftShift:
+            return tacky::Binary_Operator::BitLeftShift;
+        case ast::Binary_Operator::BitRightShift:
+            return tacky::Binary_Operator::BitRightShift;
+        default:
+            return tacky::Binary_Operator::Invalid;
         }
-        else if (subtract)
-        {
-            res = new tacky::Subtract();
-        }
-        else if (multiply)
-        {
-            res = new tacky::Multiply();
-        }
-        else if (divide)
-        {
-            res = new tacky::Divide();
-        }
-        else if (remainder)
-        {
-            res = new tacky::Remainder();
-        }
-        else if (equal)
-        {
-            res = new tacky::Equal();
-        }
-        else if (not_equal)
-        {
-            res = new tacky::NotEqual();
-        }
-        else if (less_than)
-        {
-            res = new tacky::LessThan();
-        }
-        else if (less_or_equal)
-        {
-            res = new tacky::LessOrEqual();
-        }
-        else if (greater_than)
-        {
-            res = new tacky::GreaterThan();
-        }
-        else if (greater_or_equal)
-        {
-            res = new tacky::GreaterOrEqual();
-        }
-        return res;
     }
 
     // This function is recursive and converts AST expressions to Tacky Values
-    tacky::Val *emit_tacky(ast::Expression *e, std::vector<tacky::Instruction *> &instructions)
+    tacky::Val *emit_tacky(ast::Expression *e, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values)
     {
         ast::Constant *constant = dynamic_cast<ast::Constant *>(e);
         ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
         ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
         ast::Var *var = dynamic_cast<ast::Var *>(e);
-        ast::Assignment *assignment = dynamic_cast<ast::Assignment*>(e);
+        ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
         if (constant)
         {
-            tacky::Constant *t_constant = new tacky::Constant(constant->val);
-            return t_constant;
+            std::unique_ptr<tacky::Constant> t_constant = std::make_unique<tacky::Constant>(constant->val);
+            values.push_back(std::move(t_constant));
+            return values.back().get();
         }
         else if (unary)
         {
-            tacky::Val *src = emit_tacky(unary->exp, instructions);
+            tacky::Val *src = emit_tacky(unary->exp, instructions, values);
             tacky::Identifier *dst_name = make_identifier();
-            tacky::Var *dst = new tacky::Var(dst_name);
-            tacky::Unary_Operator *unary_operator = convert_unop(unary->unary_operator);
-            tacky::Unary *new_unary = new tacky::Unary(unary_operator, src, dst);
-            instructions.push_back(new_unary);
-            return dst;
+            std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+            tacky::Unary_Operator unary_operator = convert_unop(unary->unary_operator);
+            std::unique_ptr<tacky::Unary> new_unary = std::make_unique<tacky::Unary>(unary_operator, src, dst.get());
+            instructions.push_back(std::move(new_unary));
+            values.push_back(std::move(dst));
+            return values.back().get();
         }
-        else if (binary && dynamic_cast<ast::And *>(binary->binary_operator))
+        else if (binary && binary->binary_operator == ast::Binary_Operator::And)
         {
-            tacky::Val *left = emit_tacky(binary->left, instructions);
+            tacky::Val *left = emit_tacky(binary->left, instructions, values);
             tacky::Identifier *left_false_identifier = new tacky::Identifier("false" + std::to_string(label_counter++));
-            tacky::JumpIfZero *left_jmp_if_zero = new tacky::JumpIfZero(left, left_false_identifier);
-            instructions.push_back(left_jmp_if_zero);
+            std::unique_ptr<tacky::JumpIfZero> left_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(left, left_false_identifier);
+            instructions.push_back(std::move(left_jmp_if_zero));
 
-            tacky::Val *right = emit_tacky(binary->right, instructions);
+            tacky::Val *right = emit_tacky(binary->right, instructions, values);
             tacky::Identifier *right_false_identifier = new tacky::Identifier(left_false_identifier->name);
-            tacky::JumpIfZero *right_jmp_if_zero = new tacky::JumpIfZero(right, right_false_identifier);
-            instructions.push_back(right_jmp_if_zero);
+            std::unique_ptr<tacky::JumpIfZero> right_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(right, right_false_identifier);
+            instructions.push_back(std::move(right_jmp_if_zero));
 
-            tacky::Constant *const_one = new tacky::Constant(1);
+            std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(1);
             tacky::Identifier *result_identifier_one = make_identifier();
-            tacky::Var *result_one = new tacky::Var(result_identifier_one);
-            tacky::Copy *copy_one = new tacky::Copy(const_one, result_one);
-            instructions.push_back(copy_one);
+            std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
+            std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
+            values.push_back(std::move(const_one));
+            values.push_back(std::move(result_one));
+            instructions.push_back(std::move(copy_one));
 
             tacky::Identifier *end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
-            tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
-            instructions.push_back(end_jmp);
+            std::unique_ptr<tacky::Jump> end_jmp = std::make_unique<tacky::Jump>(end_jmp_identifier);
+            instructions.push_back(std::move(end_jmp));
 
             tacky::Identifier *false_identifier = new tacky::Identifier(right_false_identifier->name);
-            tacky::Label *false_label = new tacky::Label(false_identifier);
-            instructions.push_back(false_label);
+            std::unique_ptr<tacky::Label> false_label = std::make_unique<tacky::Label>(false_identifier);
+            instructions.push_back(std::move(false_label));
 
-            tacky::Constant *const_zero = new tacky::Constant(0);
+            std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
             tacky::Identifier *result_identifier_zero = new tacky::Identifier(result_identifier_one->name);
-            tacky::Var *result_zero = new tacky::Var(result_identifier_zero);
-            tacky::Copy *copy_zero = new tacky::Copy(const_zero, result_zero);
-            instructions.push_back(copy_zero);
+            std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
+            std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
+            values.push_back(std::move(const_zero));
+            values.push_back(std::move(result_zero));
+            instructions.push_back(std::move(copy_zero));
 
             tacky::Identifier *end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
-            tacky::Label *end_label = new tacky::Label(end_label_identifier);
-            instructions.push_back(end_label);
+            std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
+            instructions.push_back(std::move(end_label));
 
             tacky::Identifier *dst_name = new tacky::Identifier(result_identifier_zero->name);
-            tacky::Var *dst = new tacky::Var(dst_name);
-            return dst;
+            std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+            values.push_back(std::move(dst));
+            return values.back().get();
         }
-        else if (binary && dynamic_cast<ast::Or *>(binary->binary_operator))
+        else if (binary && binary->binary_operator == ast::Binary_Operator::Or)
         {
-            tacky::Val *left = emit_tacky(binary->left, instructions);
+            tacky::Val *left = emit_tacky(binary->left, instructions, values);
             tacky::Identifier *left_true_identifier = new tacky::Identifier("true" + std::to_string(label_counter++));
-            tacky::JumpIfNotZero *left_jmp_if_not_zero = new tacky::JumpIfNotZero(left, left_true_identifier);
-            instructions.push_back(left_jmp_if_not_zero);
+            std::unique_ptr<tacky::JumpIfNotZero> left_jmp_if_not_zero = std::make_unique<tacky::JumpIfNotZero>(left, left_true_identifier);
+            instructions.push_back(std::move(left_jmp_if_not_zero));
 
-            tacky::Val *right = emit_tacky(binary->right, instructions);
+            tacky::Val *right = emit_tacky(binary->right, instructions, values);
             tacky::Identifier *right_true_identifier = new tacky::Identifier(left_true_identifier->name);
-            tacky::JumpIfNotZero *right_jmp_if_not_zero = new tacky::JumpIfNotZero(right, right_true_identifier);
-            instructions.push_back(right_jmp_if_not_zero);
+            std::unique_ptr<tacky::JumpIfNotZero> right_jmp_if_not_zero = std::make_unique<tacky::JumpIfNotZero>(right, right_true_identifier);
+            instructions.push_back(std::move(right_jmp_if_not_zero));
 
-            tacky::Constant *const_zero = new tacky::Constant(0);
+            std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
             tacky::Identifier *result_identifier_zero = make_identifier();
-            tacky::Var *result_zero = new tacky::Var(result_identifier_zero);
-            tacky::Copy *copy_zero = new tacky::Copy(const_zero, result_zero);
-            instructions.push_back(copy_zero);
+            std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
+            std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
+            values.push_back(std::move(const_zero));
+            values.push_back(std::move(result_zero));
+            instructions.push_back(std::move(copy_zero));
 
             tacky::Identifier *end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
-            tacky::Jump *end_jmp = new tacky::Jump(end_jmp_identifier);
-            instructions.push_back(end_jmp);
+            std::unique_ptr<tacky::Jump> end_jmp = std::make_unique<tacky::Jump>(end_jmp_identifier);
+            instructions.push_back(std::move(end_jmp));
 
             tacky::Identifier *true_identifier = new tacky::Identifier(right_true_identifier->name);
-            tacky::Label *true_label = new tacky::Label(true_identifier);
-            instructions.push_back(true_label);
+            std::unique_ptr<tacky::Label> true_label = std::make_unique<tacky::Label>(true_identifier);
+            instructions.push_back(std::move(true_label));
 
-            tacky::Constant *const_one = new tacky::Constant(1);
+            std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(1);
             tacky::Identifier *result_identifier_one = new tacky::Identifier(result_identifier_zero->name);
-            tacky::Var *result_one = new tacky::Var(result_identifier_one);
-            tacky::Copy *copy_one = new tacky::Copy(const_one, result_one);
-            instructions.push_back(copy_one);
+            std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
+            std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
+            values.push_back(std::move(const_one));
+            values.push_back(std::move(result_one));
+            instructions.push_back(std::move(copy_one));
 
             tacky::Identifier *end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
-            tacky::Label *end_label = new tacky::Label(end_label_identifier);
-            instructions.push_back(end_label);
+            std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
+            instructions.push_back(std::move(end_label));
 
             tacky::Identifier *dst_name = new tacky::Identifier(result_identifier_one->name);
-            tacky::Var *dst = new tacky::Var(dst_name);
-            return dst;
+            std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+            values.push_back(std::move(dst));
+            return values.back().get();
         }
         else if (binary)
         {
-            tacky::Val *src1 = emit_tacky(binary->left, instructions);
-            tacky::Val *src2 = emit_tacky(binary->right, instructions);
+            tacky::Val *src1 = emit_tacky(binary->left, instructions, values);
+            tacky::Val *src2 = emit_tacky(binary->right, instructions, values);
             tacky::Identifier *dst_name = make_identifier();
-            tacky::Var *dst = new tacky::Var(dst_name);
-            tacky::Binary_Operator *binary_operator = convert_binop(binary->binary_operator);
-            tacky::Binary *new_binary = new tacky::Binary(binary_operator, src1, src2, dst);
-            instructions.push_back(new_binary);
-            return dst;
+            std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+            tacky::Binary_Operator binary_operator = convert_binop(binary->binary_operator);
+            std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, src1, src2, dst.get());
+            values.push_back(std::move(dst));
+            instructions.push_back(std::move(new_binary));
+            return values.back().get();
         }
-        else if (var){
-         tacky::Identifier *var_identifier = new tacky::Identifier(var->identifier->name);
-         return new tacky::Var(var_identifier);
+        else if (var)
+        {
+            tacky::Identifier *var_identifier = new tacky::Identifier(var->identifier->name);
+            std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(var_identifier);
+            values.push_back(std::move(variable));
+            return values.back().get();
         }
-        else if (assignment){
+        else if (assignment)
+        {
             ast::Var *v = dynamic_cast<ast::Var *>(assignment->lvalue);
-            if (v){
-               tacky::Val* result = emit_tacky(assignment->exp, instructions);
-               tacky::Var *tacky_var = new tacky::Var(new tacky::Identifier(v->identifier->name));
-               instructions.push_back(new tacky::Copy(result, tacky_var));
-               return tacky_var;
+            if (v)
+            {
+                tacky::Val *result = emit_tacky(assignment->exp, instructions, values);
+                tacky::Identifier *identifer = new tacky::Identifier(v->identifier->name);
+                std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(identifer);
+                std::unique_ptr<tacky::Copy> copy = std::make_unique<tacky::Copy>(result, variable.get());
+                instructions.push_back(std::move(copy));
+                values.push_back(std::move(variable));
+                return values.back().get();
             }
         }
         return nullptr;
@@ -237,34 +230,42 @@ namespace ir_gen
     // This function converts AST function to Tacky function
     tacky::Function *generate_function(ast::Function *func)
     {
-        std::vector<tacky::Instruction *> instructions;
+        std::vector<std::unique_ptr<tacky::Instruction>> instructions;
+        std::vector<std::unique_ptr<tacky::Val>> values;
         ast::Identifier *a_identifier = func->name;
         tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
-        for ( ast::Block_Item* &b : func->body){
-            ast::D *d = dynamic_cast<ast::D *>(b);
-            ast::S *s = dynamic_cast<ast::S *>(b);
-            ast::Return *ret = dynamic_cast<ast::Return *>(b);
-            if (d){
-               if (d->declaration->init){
-                  emit_tacky(d->declaration->init, instructions);
-               }
+        for (std::unique_ptr<ast::Block_Item> &b : func->body)
+        {
+            ast::D *d = dynamic_cast<ast::D *>(b.get());
+            ast::S *s = dynamic_cast<ast::S *>(b.get());
+            if (d)
+            {
+                if (d->declaration->init)
+                {
+                    emit_tacky(d->declaration->init, instructions, values);
+                }
             }
-            else if (s){
-               ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
-               if (exp_statement){
-                  emit_tacky(exp_statement->exp, instructions);
-               }
+            else if (s)
+            {
+                ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
+                ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
+                if (exp_statement)
+                {
+                    emit_tacky(exp_statement->exp, instructions, values);
+                }
+                else if (ret)
+                {
+                    std::unique_ptr<tacky::Return> t_return = std::make_unique<tacky::Return>(emit_tacky(ret->exp, instructions, values));
+                    instructions.push_back(std::move(t_return));
+                    return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
+                }
             }
-            else if (ret){
-               tacky::Return *t_return = new tacky::Return(emit_tacky(ret->exp, instructions));
-               instructions.push_back(t_return);   
-               return new tacky::Function(t_identifier, instructions);
-            }
-
         }
-        tacky::Return *default_return = new tacky::Return(new tacky::Constant(0));  //default case to handle no return statements
-        instructions.push_back(default_return);
-        return new tacky::Function(t_identifier, instructions);
+        std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
+        std::unique_ptr<tacky::Return> default_return = std::make_unique<tacky::Return>(const_zero.get()); // default case to handle no return statements
+        values.push_back(std::move(const_zero));
+        instructions.push_back(std::move(default_return));
+        return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
     }
 
     // This function converts AST program to Tacky program

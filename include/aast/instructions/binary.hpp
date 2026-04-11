@@ -15,8 +15,6 @@ namespace aast
     ~Binary()
     {
       delete binary_operator;
-      delete operand1;
-      delete operand2;
     }
 
   protected:

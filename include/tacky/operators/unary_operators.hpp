@@ -1,17 +1,13 @@
 #pragma once
-#include "tacky/abstract/unary_operator.hpp"
+#include <cstdint>
 
 namespace tacky
 {
-  struct Complement : Unary_Operator
+  enum class Unary_Operator : uint8_t
   {
-  };
-
-  struct Negate : Unary_Operator
-  {
-  };
-
-  struct Not : Unary_Operator
-  {
+    Complement,
+    Negate,
+    Not,
+    Invalid
   };
 }
