@@ -14,6 +14,7 @@
 
 namespace parser
 {
+  constexpr std::array<std::string_view, 3> unary_operators = {"!", "~", "-"};
   constexpr std::array<std::string_view, 19> binary_operators = {"+",
                                                                  "-",
                                                                  "/",

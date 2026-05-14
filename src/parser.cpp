@@ -221,7 +221,7 @@ namespace parser
          tokens.pop_front();
          return expressions.back().get();
       }
-      else if (next_token == "~" || next_token == "-" || next_token == "!")
+      else if (std::find(unary_operators.begin(), unary_operators.end(), next_token) != unary_operators.end())
       {
          ast::Unary_Operator unary_operator = parse_unop(tokens);
          ast::Expression *inner_exp = parse_factor(tokens, expressions); // A Unary Expression Can contain another Unary Expression Whitin
