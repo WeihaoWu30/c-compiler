@@ -76,17 +76,17 @@ int main(int argc, char *argv[])
     {
       throw std::runtime_error("Missing Filename.");
     }
-    std::list<std::string> tokens = lexer::lex(PPF);
     std::unique_ptr<ast::Program> program;
     std::unique_ptr<aast::Program> assembly_program;
     std::unique_ptr<tacky::Program> tacky_program;
     if (argc == 3)
     { // when a flag is specified to the compiler
       preprocess(argv[2]);
+      std::list<std::string> tokens = lexer::lex(PPF);
       std::string s(argv[1]); // this is a must since temporary strings are strings and not const chars
       if (s.compare("--lex") == 0)
         return 0;
-      if (s.compare("--parse") == 0 || s.compare("--validate") == 0)
+      if (s.compare("--parse") == 0)
       {
         program.reset(parser::parse(tokens)); // unique ptr owns raw ptr
       }
@@ -109,6 +109,7 @@ int main(int argc, char *argv[])
     else
     {
       preprocess(argv[1]);
+      std::list<std::string> tokens = lexer::lex(PPF);
       program.reset(parser::parse(tokens));
       tacky_program.reset(ir_gen::generate_tacky(program.get()));
       assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
@@ -134,6 +135,9 @@ int main(int argc, char *argv[])
   }
   catch (const std::exception &e)
   {
+#ifndef DEBUG
+    cleanup();
+#endif
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
   }

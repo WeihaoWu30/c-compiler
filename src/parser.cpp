@@ -393,7 +393,7 @@ namespace parser
 
    ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
-      if (variable_map.count(declaration->name->name) == 1)
+      if (variable_map.count(declaration->name->name))
       {
          throw std::runtime_error(std::format("{} has already been declared.", declaration->name->name));
       }

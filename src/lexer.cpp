@@ -1,5 +1,5 @@
 #include <algorithm>
-#include <cstdlib>
+#include <stdexcept>
 #include <fstream>
 #include <iostream>
 #include <list>
@@ -89,8 +89,7 @@ namespace lexer
         }
         if (!found)
         {
-          std::cerr << "Illegal Expression: " << line << std::endl;
-          exit(1);
+          throw std::runtime_error("Illegal Expression: " + line);
         }
         else
         {

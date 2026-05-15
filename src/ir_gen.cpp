@@ -246,10 +246,10 @@ namespace ir_gen
             tacky::Val *dst = dst_var.get();
             values.push_back(std::move(dst_var));
 
-            tacky::Val *src2 = emit_tacky(compound->right, instructions, values);
+            tacky::Val *src = emit_tacky(compound->right, instructions, values);
             tacky::Binary_Operator binary_operator = convert_to_binop(compound->compound_operator);
-            std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, dst, src2, dst);
-            instructions.push_back(std::move(new_binary));
+            std::unique_ptr<tacky::Compound> new_compound = std::make_unique<tacky::Compound>(binary_operator, src, dst);
+            instructions.push_back(std::move(new_compound));
             return dst;
          }
       }
