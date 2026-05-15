@@ -9,6 +9,9 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <iostream>
+#include <stdexcept>
+#include <cstdlib>
+#include <memory>
 
 // Intermediate Files that will be deleted
 #define PPF "preprocessed.i"
@@ -67,75 +70,75 @@ void execute(const char *filename)
 
 int main(int argc, char *argv[])
 {
-  if (argc < 2)
+  try
   {
-    return 1;
+    if (argc < 2)
+    {
+      throw std::runtime_error("Missing Filename.");
+    }
+    std::unique_ptr<ast::Program> program;
+    std::unique_ptr<aast::Program> assembly_program;
+    std::unique_ptr<tacky::Program> tacky_program;
+    if (argc == 3)
+    { // when a flag is specified to the compiler
+      preprocess(argv[2]);
+      std::list<std::string> tokens = lexer::lex(PPF);
+      std::string s(argv[1]); // this is a must since temporary strings are strings and not const chars
+      if (s.compare("--lex") == 0)
+        return 0;
+      if (s.compare("--parse") == 0)
+      {
+        program.reset(parser::parse(tokens)); // unique ptr owns raw ptr
+      }
+      else if (s.compare("--tacky") == 0)
+      {
+        program.reset(parser::parse(tokens));
+        tacky_program.reset(ir_gen::generate_tacky(program.get()));
+      }
+      else if (s.compare("--codegen") == 0)
+      {
+        program.reset(parser::parse(tokens));
+        tacky_program.reset(ir_gen::generate_tacky(program.get()));
+        assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
+      }
+      else
+      {
+        throw std::runtime_error("Unknown flag: " + s);
+      }
+    }
+    else
+    {
+      preprocess(argv[1]);
+      std::list<std::string> tokens = lexer::lex(PPF);
+      program.reset(parser::parse(tokens));
+      tacky_program.reset(ir_gen::generate_tacky(program.get()));
+      assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
+      std::ofstream ostr(AF);
+      if (!ostr)
+      {
+        throw std::runtime_error("Failed To Open Assembly File");
+      }
+
+      ostr << *assembly_program; // Writing Assembly To File using Output Stream Extraction Operator Overloading
+      ostr.close();
+
+      // This is just for the test cases to pass
+      std::string s(argv[1]);
+      s.erase(s.size() - 2);
+      execute(s.c_str());
+
+#ifndef DEBUG
+      cleanup();
+#endif
+    }
+    return EXIT_SUCCESS;
   }
-  std::list<std::string> tokens;
-  ast::Program *program = nullptr;
-  aast::Program *assembly_program = nullptr;
-  tacky::Program *tacky_program = nullptr;
-  if (argc == 3)
-  { // when a flag is specified to the compiler
-    preprocess(argv[2]);
-    tokens = lexer::lex(PPF);
-    std::string s(argv[1]); // this is a must since temporary strings are strings and not const chars
-    if (s.compare("--lex") == 0)
-      return 0;
-    if (s.compare("--parse") == 0)
-    {
-      program = parser::parse(tokens);
-      delete program;
-    }
-    else if (s.compare("--validate") == 0)
-    {
-      program = parser::parse(tokens);
-    }
-    else if (s.compare("--tacky") == 0)
-    {
-      program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program);
-      delete program;
-      delete tacky_program;
-    }
-    else if (s.compare("--codegen") == 0)
-    {
-      program = parser::parse(tokens);
-      tacky_program = ir_gen::generate_tacky(program);
-      delete program;
-      assembly_program = codegen::generate_top_level(tacky_program);
-      delete tacky_program;
-      delete assembly_program;
-    }
-  }
-  else
+  catch (const std::exception &e)
   {
-    preprocess(argv[1]);
-    tokens = lexer::lex(PPF);
-    program = parser::parse(tokens);
-    tacky_program = ir_gen::generate_tacky(program);
-    delete program;
-    assembly_program = codegen::generate_top_level(tacky_program);
-    delete tacky_program;
-    std::ofstream ostr(AF);
-    if (!ostr)
-    {
-      std::cerr << "Failed To Open Assembly File" << std::endl;
-      return 1;
-    }
-
-    ostr << *(assembly_program); // Writing Assembly To File using Output Stream Extraction Operator Overloading
-    ostr.close();
-
-    delete assembly_program;
-
-    // This is just for the test cases to pass
-    std::string s(argv[1]);
-    s.erase(s.size() - 2);
-    execute(s.c_str());
 #ifndef DEBUG
     cleanup();
 #endif
+    std::cerr << e.what() << std::endl;
+    return EXIT_FAILURE;
   }
-  return 0;
 }

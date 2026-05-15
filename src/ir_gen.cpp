@@ -5,6 +5,7 @@
 #include <string>
 #include <memory>
 #include <utility>
+#include <cstdint>
 
 namespace ir_gen
 {
@@ -34,8 +35,8 @@ namespace ir_gen
       }
    }
 
-   // This function converts from a AST binary operator to TACKY operator
-   tacky::Binary_Operator convert_binop(ast::Binary_Operator op)
+   // These next 2 functions converts from a AST compound/binary operator to tacky binary operators
+   tacky::Binary_Operator convert_to_binop(ast::Binary_Operator op)
    {
       switch (op)
       {
@@ -76,6 +77,35 @@ namespace ir_gen
       }
    }
 
+   tacky::Binary_Operator convert_to_binop(ast::Compound_Operator op)
+   { // desurgared
+      switch (op)
+      {
+      case ast::Compound_Operator::AdditionAssignment:
+         return tacky::Binary_Operator::Add;
+      case ast::Compound_Operator::SubtractionAssignment:
+         return tacky::Binary_Operator::Subtract;
+      case ast::Compound_Operator::MultiplicationAssignment:
+         return tacky::Binary_Operator::Multiply;
+      case ast::Compound_Operator::DivisionAssignment:
+         return tacky::Binary_Operator::Divide;
+      case ast::Compound_Operator::ModulusAssignment:
+         return tacky::Binary_Operator::Remainder;
+      case ast::Compound_Operator::BitwiseAndAssignment:
+         return tacky::Binary_Operator::BitAnd;
+      case ast::Compound_Operator::BitwiseOrAssignment:
+         return tacky::Binary_Operator::BitOr;
+      case ast::Compound_Operator::BitwiseXorAssignment:
+         return tacky::Binary_Operator::BitXor;
+      case ast::Compound_Operator::LeftShiftAssignment:
+         return tacky::Binary_Operator::BitLeftShift;
+      case ast::Compound_Operator::RightShiftAssignment:
+         return tacky::Binary_Operator::BitRightShift;
+      default:
+         return tacky::Binary_Operator::Invalid;
+      }
+   }
+
    // This function is recursive and converts AST expressions to Tacky Values
    tacky::Val *emit_tacky(ast::Expression *e, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values)
    {
@@ -84,6 +114,7 @@ namespace ir_gen
       ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
       ast::Var *var = dynamic_cast<ast::Var *>(e);
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
+      ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
       ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
       if (constant)
       {
@@ -198,11 +229,29 @@ namespace ir_gen
          tacky::Val *src2 = emit_tacky(binary->right, instructions, values);
          tacky::Identifier *dst_name = make_identifier();
          std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-         tacky::Binary_Operator binary_operator = convert_binop(binary->binary_operator);
+         tacky::Binary_Operator binary_operator = convert_to_binop(binary->binary_operator);
          std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, src1, src2, dst.get());
          values.push_back(std::move(dst));
          instructions.push_back(std::move(new_binary));
          return values.back().get();
+      }
+      else if (compound)
+      {
+         ast::Var *v = dynamic_cast<ast::Var *>(compound->left);
+         if (v)
+         {
+            // we have to make a var ourselves instead of using emit_tacky since as an lvalue it cant be evaluated like an expression
+            tacky::Identifier *dst_name = new tacky::Identifier(v->identifier->name);
+            std::unique_ptr<tacky::Var> dst_var = std::make_unique<tacky::Var>(dst_name);
+            tacky::Val *dst = dst_var.get();
+            values.push_back(std::move(dst_var));
+
+            tacky::Val *src = emit_tacky(compound->right, instructions, values);
+            tacky::Binary_Operator binary_operator = convert_to_binop(compound->compound_operator);
+            std::unique_ptr<tacky::Compound> new_compound = std::make_unique<tacky::Compound>(binary_operator, src, dst);
+            instructions.push_back(std::move(new_compound));
+            return dst;
+         }
       }
       else if (var)
       {
@@ -225,15 +274,16 @@ namespace ir_gen
             return values.back().get();
          }
       }
-      else if (conditional){ 
-         //emit instructions for the condition
+      else if (conditional)
+      {
+         // emit instructions for the condition
          tacky::Val *condition_result = emit_tacky(conditional->condition, instructions, values);
 
          tacky::Identifier *expression_two_identifier = new tacky::Identifier("e2" + std::to_string(label_counter++));
-         std::unique_ptr<tacky::JumpIfZero> conditional_jmp = std::make_unique<tacky::JumpIfZero>(condition_result, expression_two_identifier);  //jump to else branch of ternary operator if condition is false
+         std::unique_ptr<tacky::JumpIfZero> conditional_jmp = std::make_unique<tacky::JumpIfZero>(condition_result, expression_two_identifier); // jump to else branch of ternary operator if condition is false
          instructions.push_back(std::move(conditional_jmp));
 
-         //emit instructions for true branch and copy the result into a shared result variable
+         // emit instructions for true branch and copy the result into a shared result variable
          tacky::Val *expression_one_result = emit_tacky(conditional->left, instructions, values);
          tacky::Identifier *expression_one_result_identifier = make_identifier();
          std::unique_ptr<tacky::Var> expression_one_result_dst = std::make_unique<tacky::Var>(expression_one_result_identifier);
@@ -241,17 +291,17 @@ namespace ir_gen
          values.push_back(std::move(expression_one_result_dst));
          instructions.push_back(std::move(expression_one_copy));
 
-         //after true branch, jump to the end
+         // after true branch, jump to the end
          tacky::Identifier *end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
          std::unique_ptr<tacky::Jump> end_jmp = std::make_unique<tacky::Jump>(end_jmp_identifier);
          instructions.push_back(std::move(end_jmp));
 
-         //false branch label
+         // false branch label
          tacky::Identifier *expression_two_label_identifier = new tacky::Identifier(expression_two_identifier->name);
          std::unique_ptr<tacky::Label> expression_two_label = std::make_unique<tacky::Label>(expression_two_label_identifier);
          instructions.push_back(std::move(expression_two_label));
 
-         //emit instructions for false branch and copy the result into a shared result variable
+         // emit instructions for false branch and copy the result into a shared result variable
          tacky::Val *expression_two_result = emit_tacky(conditional->right, instructions, values);
          tacky::Identifier *expression_two_result_identifier = new tacky::Identifier(expression_one_result_identifier->name);
          std::unique_ptr<tacky::Var> expression_two_result_dst = std::make_unique<tacky::Var>(expression_two_result_identifier);
@@ -259,25 +309,21 @@ namespace ir_gen
          values.push_back(std::move(expression_two_result_dst));
          instructions.push_back(std::move(expression_two_copy));
 
-         //end label
+         // end label
          tacky::Identifier *end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
          std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
          instructions.push_back(std::move(end_label));
 
-         //return a Var with the shared destination name as the result of the conditional
+         // return a Var with the shared destination name as the result of the conditional
          tacky::Identifier *result_identifier = new tacky::Identifier(expression_two_result_identifier->name);
          std::unique_ptr<tacky::Var> result_var = std::make_unique<tacky::Var>(result_identifier);
          values.push_back(std::move(result_var));
          return values.back().get();
-
-
-
       }
       return nullptr;
    }
 
-
-   //This function recursively converts AST statements into TACKY instructions
+   // This function recursively converts AST statements into TACKY instructions
    void emit_tacky_statements(ast::Statement *s, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values, bool &has_return)
    {
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
@@ -288,7 +334,7 @@ namespace ir_gen
       {
          emit_tacky(exp_statement->exp, instructions, values);
       }
-      else if (ret)  //standalone return statements
+      else if (ret) // standalone return statements
       {
          std::unique_ptr<tacky::Return> t_return = std::make_unique<tacky::Return>(emit_tacky(ret->exp, instructions, values));
          instructions.push_back(std::move(t_return));
@@ -300,10 +346,10 @@ namespace ir_gen
          {
             tacky::Val *if_value = emit_tacky(if_statement->condition, instructions, values);
             tacky::Identifier *condition_end_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
-            std::unique_ptr<tacky::JumpIfZero> condition_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(if_value, condition_end_identifier);  //jump if condition is false
+            std::unique_ptr<tacky::JumpIfZero> condition_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(if_value, condition_end_identifier); // jump if condition is false
             instructions.push_back(std::move(condition_jmp_if_zero));
 
-            bool branch_has_return = false;  //local variable to track whether current branch has return statement
+            bool branch_has_return = false; // local variable to track whether current branch has return statement
             emit_tacky_statements(if_statement->then_statement, instructions, values, branch_has_return);
 
             tacky::Identifier *end_label_identifier = new tacky::Identifier(condition_end_identifier->name);
@@ -314,10 +360,10 @@ namespace ir_gen
          {
             tacky::Val *if_value = emit_tacky(if_statement->condition, instructions, values);
             tacky::Identifier *condition_else_identifier = new tacky::Identifier("false" + std::to_string(label_counter++));
-            std::unique_ptr<tacky::JumpIfZero> condition_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(if_value, condition_else_identifier);  //jump to else block if condition is false
+            std::unique_ptr<tacky::JumpIfZero> condition_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(if_value, condition_else_identifier); // jump to else block if condition is false
             instructions.push_back(std::move(condition_jmp_if_zero));
 
-            bool then_has_return = false;  //handles cases where there is not a return in both branches....if this is the case, we need the default return in generate_function
+            bool then_has_return = false; // handles cases where there is not a return in both branches....if this is the case, we need the default return in generate_function
             bool else_has_return = false;
 
             emit_tacky_statements(if_statement->then_statement, instructions, values, then_has_return);
@@ -336,7 +382,8 @@ namespace ir_gen
             std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
             instructions.push_back(std::move(end_label));
 
-            if (then_has_return && else_has_return){   //return in all paths
+            if (then_has_return && else_has_return)
+            { // return in all paths
                has_return = true;
             }
          }
@@ -350,7 +397,7 @@ namespace ir_gen
       std::vector<std::unique_ptr<tacky::Val>> values;
       ast::Identifier *a_identifier = func->name;
       tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
-      bool has_return = false;  //variable to track whether a return happens in all paths of function
+      bool has_return = false; // variable to track whether a return happens in all paths of function
       for (std::unique_ptr<ast::Block_Item> &b : func->body)
       {
          ast::D *d = dynamic_cast<ast::D *>(b.get());
@@ -383,8 +430,9 @@ namespace ir_gen
          }
       }
 
-      //if not all paths gurantee a return, add default Return 0
-      if (!has_return){
+      // if not all paths gurantee a return, add default Return 0
+      if (!has_return)
+      {
          std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
          std::unique_ptr<tacky::Return> default_return = std::make_unique<tacky::Return>(const_zero.get()); // default case to handle no return statements
          values.push_back(std::move(const_zero));

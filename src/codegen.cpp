@@ -1,7 +1,7 @@
 #include "aast/aast.hpp"
 #include "tacky/tacky.hpp"
 #include "compiler/codegen.hpp"
-#include <ostream>
+#include <iostream>
 #include <list>
 #include <vector>
 #include <unordered_map>
@@ -220,6 +220,68 @@ namespace codegen
     }
   }
 
+  // This function converts compound operations from TACKY to assembly instructions
+  void generate_com(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  {
+    tacky::Compound *t_compound = dynamic_cast<tacky::Compound *>(instruction);
+    if (!t_compound)
+      return;
+    if (std::find(basic_operators.begin(), basic_operators.end(), t_compound->binary_operator) != basic_operators.end())
+    {
+      // move the our src into register
+      aast::Operand *dst = generate_operand(t_compound->dst, operands);
+      std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
+      aast::Reg *reg = reg1.get();
+      operands.push_back(std::move(reg1));
+
+      std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst, reg);
+      assembly_instructions.push_back(std::move(mov1));
+
+      // perform operation on register
+      aast::Operand *bin_src = generate_operand(t_compound->src, operands);
+      aast::Binary_Operator *bin_op = generate_basic_binary_operators(t_compound->binary_operator);
+      std::unique_ptr<aast::Binary> binary = std::make_unique<aast::Binary>(bin_op, bin_src, reg);
+      assembly_instructions.push_back(std::move(binary));
+
+      // move register back to src
+      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(reg, dst);
+      assembly_instructions.push_back(std::move(mov2));
+    }
+    else if (std::find(complex_operators.begin(), complex_operators.end(), t_compound->binary_operator) != complex_operators.end())
+    {
+      // move dst to register
+      aast::Operand *dst = generate_operand(t_compound->dst, operands); // dividend
+      std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::DWORD);
+
+      std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst, reg1.get());
+      assembly_instructions.push_back(std::move(mov1));
+      operands.push_back(std::move(reg1));
+
+      // perform sign extension
+      std::unique_ptr<aast::Cdq> cdq = std::make_unique<aast::Cdq>(); // sign extension since idiv can only take in 6 bit values
+      assembly_instructions.push_back(std::move(cdq));
+
+      // divide
+      aast::Operand *src = generate_operand(t_compound->src, operands); // divisor
+      std::unique_ptr<aast::Idiv> idiv = std::make_unique<aast::Idiv>(src);
+      assembly_instructions.push_back(std::move(idiv));
+
+      std::unique_ptr<aast::Reg> reg2;
+      if (t_compound->binary_operator == tacky::Binary_Operator::Divide)
+      {
+        reg2 = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::DWORD); // quotient goes in eax
+      }
+      else if (t_compound->binary_operator == tacky::Binary_Operator::Remainder)
+      {
+        reg2 = std::make_unique<aast::Reg>(aast::RegType::DX, aast::Size::DWORD); // remainder goes int edx
+      }
+
+      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(reg2.get(), dst); // copy register value to address
+      assembly_instructions.push_back(std::move(mov2));
+      operands.push_back(std::move(reg2));
+    }
+  }
+
   // This function converts conditional jumps from TACKY to assembly instructions
   void generate_jmp_if(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
   {
@@ -298,6 +360,7 @@ namespace codegen
       generate_jmp_if(instruction.get(), instructions, operands);
       generate_return(instruction.get(), instructions, operands);
       generate_unary(instruction.get(), instructions, operands);
+      generate_com(instruction.get(), instructions, operands);
       generate_bin(instruction.get(), instructions, operands);
       generate_jmp(instruction.get(), instructions);
       generate_label(instruction.get(), instructions);
@@ -337,9 +400,7 @@ namespace codegen
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(src_stack, reg.get()); // copies src to register
 
-      // delete mov->src;
-      mov->src = reg.get(); // replaces current temporary variable with register
-      // delete mov->dst;
+      mov->src = reg.get();                             // replaces current temporary variable with register
       mov->dst = dst_stack;                             // new address
       it = instructions.insert(it, std::move(new_mov)); // Inserts before the current Mov Instruction
       operands.push_back(std::move(reg));
@@ -347,13 +408,11 @@ namespace codegen
     else if (src)
     {
       src_stack = replace_pseudo(src, operands);
-      // delete mov->src;
       mov->src = src_stack;
     }
     else if (dst)
     {
       dst_stack = replace_pseudo(dst, operands);
-      // delete mov->dst;
       mov->dst = dst_stack;
     }
   }
@@ -368,7 +427,6 @@ namespace codegen
     if (operand)
     {
       aast::Stack *stack = replace_pseudo(operand, operands);
-      // delete unary->operand;
       unary->operand = stack;
     }
   }
@@ -417,8 +475,8 @@ namespace codegen
     }
   }
 
-  // This function assists in replacing pseudo variables for addiiton and subtraction operators
-  void fix_add_sub(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  // This function assists in replacing pseudo variables for basic operators
+  void fix_basic(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
   {
     aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
@@ -437,9 +495,7 @@ namespace codegen
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
 
-      // delete binary->operand1;
       binary->operand1 = reg.get();
-      // delete binary->operand2;
       binary->operand2 = dst_stack;
       it = instructions.insert(it, std::move(mov));
       operands.push_back(std::move(reg));
@@ -447,13 +503,11 @@ namespace codegen
     else if (operand1)
     {
       src_stack = replace_pseudo(operand1, operands);
-      // delete binary->operand1;
       binary->operand1 = src_stack;
     }
     else if (operand2)
     {
       dst_stack = replace_pseudo(operand2, operands);
-      // delete binary->operand2;
       binary->operand2 = dst_stack;
     }
 
@@ -461,7 +515,6 @@ namespace codegen
     if (dst)
     {
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
-      // delete binary->operand2;
       binary->operand2 = reg.get();
 
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(dst, reg.get());
@@ -485,7 +538,6 @@ namespace codegen
     if (src)
     {
       aast::Stack *src_stack = replace_pseudo(src, operands);
-      // delete binary->operand1;
       binary->operand1 = src_stack;
     }
     if (dst)
@@ -494,8 +546,7 @@ namespace codegen
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst_stack, reg.get()); // copies address content into register
-      // delete binary->operand2;
-      binary->operand2 = reg.get(); // multiplies constant by content in register
+      binary->operand2 = reg.get();                                                        // multiplies constant by content in register
       instructions.insert(it, std::move(mov1));
       ++it;
 
@@ -517,14 +568,13 @@ namespace codegen
     if (pseudo)
     {
       aast::Stack *stack = replace_pseudo(pseudo, operands);
-      // delete idiv->operand;
       idiv->operand = stack;
     }
     else if (imm_val)
     {
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm_val, reg.get()); // copies divisor into a register and then apply the division onto that register directly
-      // delete idiv->operand; aast::Mov Instruction uses its immediate value so we can't delete
+      // aast::Mov Instruction uses its immediate value so we can't delete
       idiv->operand = reg.get();
       it = instructions.insert(it, std::move(mov));
       operands.push_back(std::move(reg));
@@ -547,9 +597,7 @@ namespace codegen
       dst_stack = replace_pseudo(operand2, operands);
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
-      // delete cmp->operand1;
       cmp->operand1 = reg.get();
-      // delete cmp->operand2;
       cmp->operand2 = dst_stack;
 
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
@@ -560,13 +608,11 @@ namespace codegen
     else if (operand1)
     {
       src_stack = replace_pseudo(operand1, operands);
-      // delete cmp->operand1;
       cmp->operand1 = src_stack;
     }
     else if (operand2)
     {
       dst_stack = replace_pseudo(operand2, operands);
-      // delete cmp->operand2;
       cmp->operand2 = dst_stack;
     }
 
@@ -579,7 +625,6 @@ namespace codegen
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(mov_copy.get(), reg.get());
       it = instructions.insert(it, std::move(mov));
 
-      // delete cmp->operand2;
       cmp->operand2 = reg.get();
 
       operands.push_back(std::move(reg));
@@ -613,7 +658,7 @@ namespace codegen
       fix_cmp(it, instructions, operands);
       fix_set(it, operands);
       fix_mult(it, instructions, operands);
-      fix_add_sub(it, instructions, operands);
+      fix_basic(it, instructions, operands);
       fix_div(it, instructions, operands);
     }
 
@@ -622,7 +667,7 @@ namespace codegen
   }
 
   // This function converts Tacky nodes to assembly instructions
-  aast::Program *generate_top_level(tacky::Program *&tacky_program)
+  aast::Program *generate_top_level(tacky::Program *tacky_program)
   {
     aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
     std::vector<std::unique_ptr<aast::Operand>> operands;

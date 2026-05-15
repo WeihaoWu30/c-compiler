@@ -5,3 +5,4 @@
 #include "ast/expressions/var.hpp"
 #include "ast/expressions/assignment.hpp"
 #include "ast/expressions/conditional.hpp"
+#include "ast/expressions/compound.hpp"

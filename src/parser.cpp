@@ -1,6 +1,7 @@
 #include "ast/ast.hpp"
 #include "compiler/parser.hpp"
-#include <cstdlib>
+#include <stdexcept>
+#include <format>
 #include <iostream>
 #include <vector>
 #include <string>
@@ -23,6 +24,10 @@ namespace parser
    // This Function Matches A Token Against Legal Syntax
    void expect(std::string expected, std::list<std::string> &tokens)
    {
+      if (tokens.empty())
+      {
+         throw std::runtime_error(std::format("Expected {}, but found nothing.", expected));
+      }
       std::string actual(tokens.front());
       if (actual == expected)
       {
@@ -30,9 +35,7 @@ namespace parser
       }
       else
       {
-         std::cerr << "Expected " << expected << " but found " << actual
-                   << std::endl;
-         exit(1);
+         throw std::runtime_error(std::format("Expected {} but found {}.", expected, actual));
       }
    }
 
@@ -52,18 +55,11 @@ namespace parser
       std::string next_token(tokens.front());
       tokens.pop_front();
       if (next_token == "~")
-      {
          return ast::Unary_Operator::Complement;
-      }
       else if (next_token == "-")
-      {
          return ast::Unary_Operator::Negate;
-      }
       else if (next_token == "!")
-      {
          return ast::Unary_Operator::Not;
-      }
-
       return ast::Unary_Operator::Invalid;
    }
 
@@ -73,79 +69,70 @@ namespace parser
       std::string next_token(tokens.front());
       tokens.pop_front();
       if (next_token == "+")
-      {
          return ast::Binary_Operator::Add;
-      }
       else if (next_token == "-")
-      {
          return ast::Binary_Operator::Subtract;
-      }
       else if (next_token == "/")
-      {
          return ast::Binary_Operator::Divide;
-      }
       else if (next_token == "*")
-      {
          return ast::Binary_Operator::Multiply;
-      }
       else if (next_token == "%")
-      {
          return ast::Binary_Operator::Remainder;
-      }
       else if (next_token == "<")
-      {
          return ast::Binary_Operator::LessThan;
-      }
       else if (next_token == "<=")
-      {
          return ast::Binary_Operator::LessOrEqual;
-      }
       else if (next_token == ">")
-      {
          return ast::Binary_Operator::GreaterThan;
-      }
       else if (next_token == ">=")
-      {
          return ast::Binary_Operator::GreaterOrEqual;
-      }
       else if (next_token == "==")
-      {
          return ast::Binary_Operator::Equal;
-      }
       else if (next_token == "!=")
-      {
          return ast::Binary_Operator::NotEqual;
-      }
       else if (next_token == "&&")
-      {
          return ast::Binary_Operator::And;
-      }
       else if (next_token == "||")
-      {
          return ast::Binary_Operator::Or;
-      }
       else if (next_token == "|")
-      {
          return ast::Binary_Operator::BitOr;
-      }
       else if (next_token == "&")
-      {
          return ast::Binary_Operator::BitAnd;
-      }
       else if (next_token == "^")
-      {
          return ast::Binary_Operator::BitXor;
-      }
       else if (next_token == ">>")
-      {
          return ast::Binary_Operator::BitRightShift;
-      }
       else if (next_token == "<<")
-      {
          return ast::Binary_Operator::BitLeftShift;
-      }
-
       return ast::Binary_Operator::Invalid;
+   }
+
+   // Parses only compound operators for right association
+   ast::Compound_Operator parse_comop(std::list<std::string> &tokens)
+   {
+      std::string next_token(tokens.front());
+      tokens.pop_front();
+      if (next_token == "+=")
+         return ast::Compound_Operator::AdditionAssignment;
+      else if (next_token == "-=")
+         return ast::Compound_Operator::SubtractionAssignment;
+      else if (next_token == "*=")
+         return ast::Compound_Operator::MultiplicationAssignment;
+      else if (next_token == "/=")
+         return ast::Compound_Operator::DivisionAssignment;
+      else if (next_token == "%=")
+         return ast::Compound_Operator::ModulusAssignment;
+      else if (next_token == "&=")
+         return ast::Compound_Operator::BitwiseAndAssignment;
+      else if (next_token == "|=")
+         return ast::Compound_Operator::BitwiseOrAssignment;
+      else if (next_token == "^=")
+         return ast::Compound_Operator::BitwiseXorAssignment;
+      else if (next_token == ">>=")
+         return ast::Compound_Operator::RightShiftAssignment;
+      else if (next_token == "<<=")
+         return ast::Compound_Operator::LeftShiftAssignment;
+      return ast::Compound_Operator::Invalid;
    }
 
    // This function hard codes each symbol's precedence values
@@ -173,12 +160,13 @@ namespace parser
          return 5;
       else if (next_token == "?")
          return 3;
-      else if (next_token == "=")
+      else if (next_token == "=" || (std::find(compound_operators.begin(), compound_operators.end(), next_token) != compound_operators.end()))
          return 1;
       return 0;
    }
 
-   ast::Expression *parse_conditional_middle(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions){
+   ast::Expression *parse_conditional_middle(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   {
       expect("?", tokens);
       ast::Expression *middle = parse_expression(tokens, 0, expressions);
       expect(":", tokens);
@@ -189,33 +177,45 @@ namespace parser
    ast::Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Expression *left = parse_factor(tokens, expressions);
+      if (tokens.empty())
+      {
+         throw std::runtime_error("Expected ;, but found nothing.");
+      }
       std::string next_token(tokens.front());
       ast::Expression *right;
-      while (std::find(binary_operators.begin(), binary_operators.end(), next_token) != binary_operators.end() && precedence(next_token) >= min_prec)
+      while (
+          (std::find(binary_operators.begin(), binary_operators.end(), next_token) != binary_operators.end() || std::find(compound_operators.begin(), compound_operators.end(), next_token) != compound_operators.end()) &&
+          precedence(next_token) >= min_prec)
       { // Ensures that we process preceeding operators first
          if (next_token == "=")
          {
             expect("=", tokens);
             right = parse_expression(tokens, precedence(next_token), expressions);
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Assignment>(left, right);
-            left = unique_left.get();
             expressions.push_back(std::move(unique_left));
          }
-         else if (next_token == "?"){
+         else if (std::find(compound_operators.begin(), compound_operators.end(), next_token) != compound_operators.end())
+         {
+            ast::Compound_Operator compound_operator = parse_comop(tokens);
+            right = parse_expression(tokens, precedence(next_token), expressions);
+            std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Compound>(compound_operator, left, right);
+            expressions.push_back(std::move(unique_left));
+         }
+         else if (next_token == "?")
+         {
             ast::Expression *middle = parse_conditional_middle(tokens, expressions);
-            ast::Expression *right = parse_expression(tokens, precedence(next_token), expressions);
+            right = parse_expression(tokens, precedence(next_token), expressions);
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Conditional>(left, middle, right);
             expressions.push_back(std::move(unique_left));
-            left = expressions.back().get();
          }
          else
          {
             ast::Binary_Operator binary_operator = parse_binop(tokens);
-            ast::Expression *right = parse_expression(tokens, precedence(next_token) + 1, expressions); // The +1 ensures we are grouping from the left side to the right side
+            right = parse_expression(tokens, precedence(next_token) + 1, expressions); // The +1 ensures we are grouping from the left side to the right side
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Binary>(binary_operator, left, right);
             expressions.push_back(std::move(unique_left));
-            left = expressions.back().get();
          }
+         left = expressions.back().get();
          next_token = tokens.front();
       }
 
@@ -226,18 +226,20 @@ namespace parser
    ast::Expression *parse_factor(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       if (tokens.empty())
-         return nullptr; // REQUIRED BASE CASE
+      {
+         throw std::runtime_error("Expected expression after operator, but found nothing.");
+      }
       std::string next_token(tokens.front());
       char *endptr;
-      std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
-      if (*endptr == '\0')                          // valid integer
+      long value = std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
+      if (*endptr == '\0')                                       // valid integer
       {
-         std::unique_ptr<ast::Constant> constant = std::make_unique<ast::Constant>(std::stoi(next_token));
+         std::unique_ptr<ast::Constant> constant = std::make_unique<ast::Constant>(value);
          expressions.push_back(std::move(constant));
          tokens.pop_front();
          return expressions.back().get();
       }
-      else if (next_token == "~" || next_token == "-" || next_token == "!")
+      else if (std::find(unary_operators.begin(), unary_operators.end(), next_token) != unary_operators.end())
       {
          ast::Unary_Operator unary_operator = parse_unop(tokens);
          ast::Expression *inner_exp = parse_factor(tokens, expressions); // A Unary Expression Can contain another Unary Expression Whitin
@@ -252,7 +254,10 @@ namespace parser
          expect(")", tokens);
          return inner_exp;
       }
-      else if (std::find(binary_operators.begin(), binary_operators.end(), next_token) == binary_operators.end() && tokens.front() != "int")
+      else if (
+          std::find(binary_operators.begin(), binary_operators.end(), next_token) == binary_operators.end() &&
+          std::find(compound_operators.begin(), compound_operators.end(), next_token) == compound_operators.end() &&
+          tokens.front() != "int")
       {
          std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(new ast::Identifier(next_token));
          expressions.push_back(std::move(variable));
@@ -261,12 +266,7 @@ namespace parser
       }
       else
       {
-         // ast::Identifier *identifier = new ast::Identifier(tokens.front());
-         // ast::Var *variable = new ast::Var(identifier);
-         // tokens.erase(tokens.begin());
-         // return variable;
-         std::cerr << "Malformed Expression " << *tokens.begin() << std::endl;
-         exit(1);
+         throw std::runtime_error(std::format("Malformed Expression: {}", tokens.front()));
       }
    }
 
@@ -281,19 +281,22 @@ namespace parser
          ast::Return *ret = new ast::Return(return_val);
          return ret;
       }
-      else if (tokens.front() == "if"){
+      else if (tokens.front() == "if")
+      {
          tokens.pop_front();
          expect("(", tokens);
          ast::Expression *condition = parse_expression(tokens, 0, expressions);
          expect(")", tokens);
          ast::Statement *body = parse_statement(tokens, expressions);
          ast::If *if_statement;
-         if (tokens.front() == "else"){
+         if (tokens.front() == "else")
+         {
             tokens.pop_front();
             ast::Statement *else_block = parse_statement(tokens, expressions);
             if_statement = new ast::If(condition, body, else_block);
          }
-         else{
+         else
+         {
             if_statement = new ast::If(condition, body);
          }
          return if_statement;
@@ -317,6 +320,7 @@ namespace parser
    ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
+      ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
       ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
       ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
       ast::Var *var = dynamic_cast<ast::Var *>(e);
@@ -326,13 +330,25 @@ namespace parser
          ast::Var *var_node = dynamic_cast<ast::Var *>(assignment->lvalue);
          if (!var_node)
          {
-            std::cerr << "Invalid lvalue" << std::endl;
-            exit(1);
+            throw std::runtime_error("Invalid lvalue.");
          }
          ast::Expression *lvalue = resolve_exp(assignment->lvalue, variable_map, expressions);
          ast::Expression *exp = resolve_exp(assignment->exp, variable_map, expressions);
          std::unique_ptr<ast::Assignment> a = std::make_unique<ast::Assignment>(lvalue, exp);
          expressions.push_back(std::move(a));
+         return expressions.back().get();
+      }
+      else if (compound)
+      {
+         ast::Var *var_node = dynamic_cast<ast::Var *>(compound->left);
+         if (!var_node)
+         {
+            throw std::runtime_error("Invalid lvalue.");
+         }
+         ast::Expression *left = resolve_exp(compound->left, variable_map, expressions);
+         ast::Expression *right = resolve_exp(compound->right, variable_map, expressions);
+         std::unique_ptr<ast::Compound> c = std::make_unique<ast::Compound>(compound->compound_operator, left, right);
+         expressions.push_back(std::move(c));
          return expressions.back().get();
       }
       else if (binary)
@@ -360,11 +376,11 @@ namespace parser
          }
          else
          {
-            std::cerr << "Undeclared variable!" << std::endl;
-            exit(1);
+            throw std::runtime_error(std::format("{} is an undeclared variable.", var->identifier->name));
          }
       }
-      else if (conditional){
+      else if (conditional)
+      {
          ast::Expression *condition = resolve_exp(conditional->condition, variable_map, expressions);
          ast::Expression *left = resolve_exp(conditional->left, variable_map, expressions);
          ast::Expression *right = resolve_exp(conditional->right, variable_map, expressions);
@@ -377,10 +393,9 @@ namespace parser
 
    ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
-      if (variable_map.count(declaration->name->name) == 1)
+      if (variable_map.count(declaration->name->name))
       {
-         std::cerr << "Duplicate variable declaration" << std::endl;
-         exit(1);
+         throw std::runtime_error(std::format("{} has already been declared.", declaration->name->name));
       }
       std::string unique_name = make_temporary(declaration->name->name);
       variable_map[declaration->name->name] = unique_name;
@@ -411,11 +426,13 @@ namespace parser
       {
          return new ast::Null();
       }
-      if (if_statement){
+      if (if_statement)
+      {
          ast::Expression *condition = resolve_exp(if_statement->condition, variable_map, expressions);
          ast::Statement *then = resolve_statement(if_statement->then_statement, variable_map, expressions);
          ast::Statement *else_block = nullptr;
-         if (if_statement->else_statement){
+         if (if_statement->else_statement)
+         {
             else_block = resolve_statement(if_statement->else_statement, variable_map, expressions);
          }
          return new ast::If(condition, then, else_block);
@@ -431,8 +448,7 @@ namespace parser
          tokens.pop_front();
          if (!is_type(tokens.front()))
          {
-            std::cerr << "Not a valid type" << std::endl;
-            exit(1);
+            throw std::runtime_error(std::format("{} is not a valid type.", tokens.front()));
          }
 
          std::string data_type(tokens.front());
@@ -458,8 +474,7 @@ namespace parser
          std::strtol(tokens.front().c_str(), &endptr, 10); // parses decimal integers
          if (std::next(tokens.begin()) == tokens.end())
          {
-            std::cerr << "Missing semicolon" << std::endl;
-            exit(1);
+            throw std::runtime_error("Missing semicolon.");
          }
          std::string variable_declaration(*std::next(tokens.begin()));
          if (*endptr != '\0' && tokens.front() != "return")
@@ -470,9 +485,9 @@ namespace parser
          }
          else
          {
-            std::cerr << "Not a valid variable name" << std::endl;
-            exit(1);
+            throw std::runtime_error(std::format("{} is not a valid variable name.", variable_declaration));
          }
+
          if (variable_declaration == "=")
          {
             // expect("=", tokens);
@@ -488,8 +503,7 @@ namespace parser
          }
          else
          {
-            std::cerr << "Not a valid block item" << std::endl;
-            exit(1);
+            throw std::runtime_error("Not a valid block item.");
          }
          ast::Declaration *resolved_declaration = resolve_declaration(declaration, variable_map, expressions);
          std::unique_ptr<ast::D> d = std::make_unique<ast::D>(resolved_declaration);
@@ -529,8 +543,7 @@ namespace parser
       ast::Function *func = new ast::Function(func_name, std::move(function_body), std::move(expressions));
       if (!tokens.empty())
       {
-         std::cerr << "Extra Characters Found For Minimal Compiler" << std::endl;
-         exit(1);
+         throw std::runtime_error("Extra Characters Found For Minimal Compiler.");
       }
 
       variable_map.clear();

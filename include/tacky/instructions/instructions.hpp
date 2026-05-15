@@ -7,3 +7,4 @@
 #include "tacky/instructions/label.hpp"
 #include "tacky/instructions/return.hpp"
 #include "tacky/instructions/unary.hpp"
+#include "tacky/instructions/compound.hpp"
