@@ -28,19 +28,22 @@ namespace aast
     {
       return_instruction = dynamic_cast<Ret *>(instr.get());
       if (return_instruction)
-        continue;
+        ostr << *instr;
 
       if (dynamic_cast<Label *>(instr.get()))
       {
         ostr << std::endl
              << *instr;
       }
+      else if (dynamic_cast<Ret *>(instr.get())){  //emit inline Ret
+         ostr << *instr;
+      }
       else
       {
         ostr << "\t" << *instr;
       }
     }
-    ostr << *return_instruction << std::endl;
+   //  ostr << *return_instruction << std::endl;
     return ostr;
   }
 

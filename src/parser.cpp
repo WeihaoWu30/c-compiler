@@ -171,9 +171,18 @@ namespace parser
          return 10;
       else if (next_token == "||")
          return 5;
+      else if (next_token == "?")
+         return 3;
       else if (next_token == "=")
          return 1;
       return 0;
+   }
+
+   ast::Expression *parse_conditional_middle(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions){
+      expect("?", tokens);
+      ast::Expression *middle = parse_expression(tokens, 0, expressions);
+      expect(":", tokens);
+      return middle;
    }
 
    // This function groups up expressions and orders them by precedence to create a recursive branch of Binary AST nodes
@@ -191,6 +200,13 @@ namespace parser
             std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Assignment>(left, right);
             left = unique_left.get();
             expressions.push_back(std::move(unique_left));
+         }
+         else if (next_token == "?"){
+            ast::Expression *middle = parse_conditional_middle(tokens, expressions);
+            ast::Expression *right = parse_expression(tokens, precedence(next_token), expressions);
+            std::unique_ptr<ast::Expression> unique_left = std::make_unique<ast::Conditional>(left, middle, right);
+            expressions.push_back(std::move(unique_left));
+            left = expressions.back().get();
          }
          else
          {
@@ -265,6 +281,23 @@ namespace parser
          ast::Return *ret = new ast::Return(return_val);
          return ret;
       }
+      else if (tokens.front() == "if"){
+         tokens.pop_front();
+         expect("(", tokens);
+         ast::Expression *condition = parse_expression(tokens, 0, expressions);
+         expect(")", tokens);
+         ast::Statement *body = parse_statement(tokens, expressions);
+         ast::If *if_statement;
+         if (tokens.front() == "else"){
+            tokens.pop_front();
+            ast::Statement *else_block = parse_statement(tokens, expressions);
+            if_statement = new ast::If(condition, body, else_block);
+         }
+         else{
+            if_statement = new ast::If(condition, body);
+         }
+         return if_statement;
+      }
       else if (tokens.front() == ";")
       {
          expect(";", tokens);
@@ -287,6 +320,7 @@ namespace parser
       ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
       ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
       ast::Var *var = dynamic_cast<ast::Var *>(e);
+      ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
       if (assignment)
       {
          ast::Var *var_node = dynamic_cast<ast::Var *>(assignment->lvalue);
@@ -330,6 +364,14 @@ namespace parser
             exit(1);
          }
       }
+      else if (conditional){
+         ast::Expression *condition = resolve_exp(conditional->condition, variable_map, expressions);
+         ast::Expression *left = resolve_exp(conditional->left, variable_map, expressions);
+         ast::Expression *right = resolve_exp(conditional->right, variable_map, expressions);
+         std::unique_ptr<ast::Conditional> c = std::make_unique<ast::Conditional>(condition, left, right);
+         expressions.push_back(std::move(c));
+         return expressions.back().get();
+      }
       return e;
    }
 
@@ -356,6 +398,7 @@ namespace parser
       ast::Return *ret = dynamic_cast<ast::Return *>(statement);
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(statement);
       ast::Null *null = dynamic_cast<ast::Null *>(statement);
+      ast::If *if_statement = dynamic_cast<ast::If *>(statement);
       if (ret)
       {
          return new ast::Return(resolve_exp(ret->exp, variable_map, expressions));
@@ -367,6 +410,15 @@ namespace parser
       if (null)
       {
          return new ast::Null();
+      }
+      if (if_statement){
+         ast::Expression *condition = resolve_exp(if_statement->condition, variable_map, expressions);
+         ast::Statement *then = resolve_statement(if_statement->then_statement, variable_map, expressions);
+         ast::Statement *else_block = nullptr;
+         if (if_statement->else_statement){
+            else_block = resolve_statement(if_statement->else_statement, variable_map, expressions);
+         }
+         return new ast::If(condition, then, else_block);
       }
       return nullptr;
    }

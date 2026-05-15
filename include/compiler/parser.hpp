@@ -15,25 +15,26 @@
 namespace parser
 {
   constexpr std::array<std::string_view, 3> unary_operators = {"!", "~", "-"};
-  constexpr std::array<std::string_view, 19> binary_operators = {"+",
-                                                                 "-",
-                                                                 "/",
-                                                                 "%",
-                                                                 "*",
-                                                                 "<",
-                                                                 "<=",
-                                                                 ">",
-                                                                 ">=",
-                                                                 "==",
-                                                                 "!=",
-                                                                 "&&",
-                                                                 "||",
-                                                                 "=",
-                                                                 ">>",
-                                                                 "<<",
-                                                                 "&",
-                                                                 "|",
-                                                                 "^"};
+  const std::array<std::string_view, 20> binary_operators = {"+",
+                                                             "-",
+                                                             "/",
+                                                             "%",
+                                                             "*",
+                                                             "<",
+                                                             "<=",
+                                                             ">",
+                                                             ">=",
+                                                             "==",
+                                                             "!=",
+                                                             "&&",
+                                                             "||",
+                                                             "=",
+                                                             ">>",
+                                                             "<<",
+                                                             "&",
+                                                             "|",
+                                                             "^",
+                                                             "?"};
 
   extern std::unordered_map<std::string, std::string> variable_map;
   extern std::unordered_map<std::string, std::string> symbol_table;
@@ -42,6 +43,7 @@ namespace parser
   ast::Unary_Operator parse_unop(std::list<std::string> &tokens);
   ast::Binary_Operator parse_binop(std::list<std::string> &tokens);
   uint16_t precedence(const std::string &next_token);
+  ast::Expression *parse_conditional_middle(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   ast::Expression *parse_expression(std::list<std::string> &tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   ast::Expression *parse_factor(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   ast::Statement *parse_statement(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
