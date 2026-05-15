@@ -11,7 +11,7 @@
 
 namespace lexer
 {
-  std::array<std::regex, 37> patterns = {std::regex("int\\b"),
+  std::array<std::regex, 47> patterns = {std::regex("int\\b"),
                                          std::regex("void\\b"),
                                          std::regex("return\\b"),
                                          std::regex("typedef\\b"),
@@ -47,7 +47,18 @@ namespace lexer
                                          std::regex(">"),
                                          std::regex("="),
                                          std::regex(":"),
-                                         std::regex("\\?")};
+                                         std::regex("\\?"),
+                                         std::regex("\\+="),
+                                         std::regex("-="),
+                                         std::regex("\\*="),
+                                         std::regex("/="),
+                                         std::regex("%="),
+                                         std::regex("&="),
+                                         std::regex("\\|="),
+                                         std::regex("\\^="),
+                                         std::regex(">>="),
+                                         std::regex("<<=")};
+
   std::list<std::string> lex(const std::string &filename)
   {
 

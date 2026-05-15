@@ -66,5 +66,5 @@ namespace codegen
     void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
     void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands);
     void compiler_pass(std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    aast::Program *generate_top_level(tacky::Program *&tacky_program);
+    aast::Program *generate_top_level(tacky::Program *tacky_program);
 }

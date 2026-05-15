@@ -622,7 +622,7 @@ namespace codegen
   }
 
   // This function converts Tacky nodes to assembly instructions
-  aast::Program *generate_top_level(tacky::Program *&tacky_program)
+  aast::Program *generate_top_level(tacky::Program *tacky_program)
   {
     aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
     std::vector<std::unique_ptr<aast::Operand>> operands;

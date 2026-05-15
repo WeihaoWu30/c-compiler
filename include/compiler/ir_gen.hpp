@@ -13,7 +13,8 @@ namespace ir_gen
   extern uint32_t label_counter;
   tacky::Identifier *make_identifier();
   tacky::Unary_Operator convert_unop(ast::Unary_Operator op);
-  tacky::Binary_Operator convert_binop(ast::Binary_Operator op);
+  tacky::Binary_Operator convert_to_binop(ast::Binary_Operator op);
+  tacky::Binary_Operator convert_to_binop(ast::Compound_Operator op);
   tacky::Val *emit_tacky(ast::Expression *e, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values);
   tacky::Function *generate_function(ast::Function *func);
   tacky::Program *generate_tacky(ast::Program *program);
