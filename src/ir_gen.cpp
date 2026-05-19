@@ -329,6 +329,7 @@ namespace ir_gen
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
       ast::Return *ret = dynamic_cast<ast::Return *>(s);
       ast::If *if_statement = dynamic_cast<ast::If *>(s);
+      ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(s);
 
       if (exp_statement)
       {
@@ -388,6 +389,44 @@ namespace ir_gen
             }
          }
       }
+      else if (compound_statement)
+      {
+         for (std::unique_ptr<ast::Block_Item> &b : compound_statement->block->block_items)
+         {
+            ast::D *d = dynamic_cast<ast::D *>(b.get());
+            ast::S *s = dynamic_cast<ast::S *>(b.get());
+            if (d)
+            {
+               if (d->declaration->init)
+               {
+                  emit_tacky(d->declaration->init, instructions, values);
+               }
+            }
+            else if (s)
+            {
+               ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
+               ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
+               ast::If *if_statement = dynamic_cast<ast::If *>(s->statement);
+               ast::Compound_Statement *inner_compound_statement = dynamic_cast<ast::Compound_Statement *>(s->statement);
+               if (exp_statement)
+               {
+                  emit_tacky_statements(exp_statement, instructions, values, has_return);
+               }
+               else if (ret)
+               {
+                  emit_tacky_statements(ret, instructions, values, has_return);
+                  // return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
+               }
+               else if (if_statement)
+               {
+                  emit_tacky_statements(if_statement, instructions, values, has_return);
+               }
+               else if (inner_compound_statement){
+                  emit_tacky_statements(inner_compound_statement, instructions, values, has_return);
+               }
+            }
+         }
+      }
    }
 
    // This function converts AST function to Tacky function
@@ -398,7 +437,7 @@ namespace ir_gen
       ast::Identifier *a_identifier = func->name;
       tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->name);
       bool has_return = false; // variable to track whether a return happens in all paths of function
-      for (std::unique_ptr<ast::Block_Item> &b : func->body)
+      for (std::unique_ptr<ast::Block_Item> &b : func->body->block_items)
       {
          ast::D *d = dynamic_cast<ast::D *>(b.get());
          ast::S *s = dynamic_cast<ast::S *>(b.get());
@@ -414,6 +453,7 @@ namespace ir_gen
             ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
             ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
             ast::If *if_statement = dynamic_cast<ast::If *>(s->statement);
+            ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(s->statement);
             if (exp_statement)
             {
                emit_tacky_statements(exp_statement, instructions, values, has_return);
@@ -426,6 +466,9 @@ namespace ir_gen
             else if (if_statement)
             {
                emit_tacky_statements(if_statement, instructions, values, has_return);
+            }
+            else if (compound_statement){
+               emit_tacky_statements(compound_statement, instructions, values, has_return);
             }
          }
       }
