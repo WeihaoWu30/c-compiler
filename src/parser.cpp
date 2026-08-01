@@ -18,8 +18,9 @@
 namespace parser
 {
    // For Parsing Expressions
-   std::unordered_map<std::string, std::string> variable_map;
+   std::unordered_map<std::string, std::pair<std::string, bool>> variable_map;
    std::unordered_map<std::string, std::string> symbol_table;
+   uint32_t var_counter = 0;
 
    // This Function Matches A Token Against Legal Syntax
    void expect(std::string expected, std::list<std::string> &tokens)
@@ -46,8 +47,17 @@ namespace parser
 
    std::string make_temporary(std::string s)
    {
-      return s + "." + std::to_string(ir_gen::id_counter);
+      return s + "." + std::to_string(var_counter++);
    }
+
+   std::unordered_map<std::string, std::pair<std::string, bool>> copy_variable_map(std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map){
+      std::unordered_map<std::string, std::pair<std::string, bool>> duplicate(variable_map);
+      for ( auto &c : duplicate){
+         c.second.second = false;
+      }
+      return duplicate;
+   }
+
 
    // This function ONLY matches the next token against a bitwise negate or bitwise complement
    ast::Unary_Operator parse_unop(std::list<std::string> &tokens)
@@ -270,7 +280,7 @@ namespace parser
       }
    }
 
-   // This function currently only handles return statements
+   // This function handles statements
    ast::Statement *parse_statement(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       if (tokens.front() == "return")
@@ -307,6 +317,17 @@ namespace parser
          ast::Null *null_statement = new ast::Null();
          return null_statement;
       }
+      else if (tokens.front() == "{"){
+         expect("{", tokens);
+         std::vector<std::unique_ptr<ast::Block_Item>> block_items;
+         while(tokens.front() != "}"){
+            block_items.push_back(parse_block_item(tokens, expressions));
+         }
+         ast::Block *block = new ast::Block(std::move(block_items));
+         expect("}", tokens);
+         ast::Compound_Statement *compound = new ast::Compound_Statement(block);
+         return compound;
+      }
       else
       {
          ast::Expression *exp = parse_expression(tokens, 0, expressions);
@@ -317,7 +338,7 @@ namespace parser
       return nullptr;
    }
 
-   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
       ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
@@ -370,7 +391,7 @@ namespace parser
       {
          if (variable_map.count(var->identifier->name))
          {
-            std::unique_ptr<ast::Var> v = std::make_unique<ast::Var>(new ast::Identifier(variable_map[var->identifier->name]));
+            std::unique_ptr<ast::Var> v = std::make_unique<ast::Var>(new ast::Identifier(variable_map[var->identifier->name].first));
             expressions.push_back(std::move(v));
             return expressions.back().get();
          }
@@ -391,14 +412,32 @@ namespace parser
       return e;
    }
 
-   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Block *resolve_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions){
+      std::vector<std::unique_ptr<ast::Block_Item>> resolved_items;
+      for (auto &item: block->block_items){
+         ast::D *d = dynamic_cast<ast::D *>(item.get());
+         ast::S *s = dynamic_cast<ast::S *>(item.get());
+
+         if (d){
+            ast::Declaration *resolved_declaration = resolve_declaration(d->declaration, variable_map, expressions);
+            resolved_items.push_back(std::make_unique<ast::D>(resolved_declaration));
+         }
+         else if (s){
+            ast::Statement *resolved_statement = resolve_statement(s->statement, variable_map, expressions);
+            resolved_items.push_back(std::make_unique<ast::S>(resolved_statement));
+         }
+      }
+      return new ast::Block(std::move(resolved_items));
+   }
+
+   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
-      if (variable_map.count(declaration->name->name))
+      if (variable_map.count(declaration->name->name) && variable_map[declaration->name->name].second)
       {
          throw std::runtime_error(std::format("{} has already been declared.", declaration->name->name));
       }
       std::string unique_name = make_temporary(declaration->name->name);
-      variable_map[declaration->name->name] = unique_name;
+      variable_map[declaration->name->name] = std::make_pair(unique_name, true);
       ast::Expression *prev_init = declaration->init;
       if (declaration->init != nullptr)
       {
@@ -408,12 +447,13 @@ namespace parser
       return resolved;
    }
 
-   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::string> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Return *ret = dynamic_cast<ast::Return *>(statement);
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(statement);
       ast::Null *null = dynamic_cast<ast::Null *>(statement);
       ast::If *if_statement = dynamic_cast<ast::If *>(statement);
+      ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(statement);
       if (ret)
       {
          return new ast::Return(resolve_exp(ret->exp, variable_map, expressions));
@@ -436,6 +476,10 @@ namespace parser
             else_block = resolve_statement(if_statement->else_statement, variable_map, expressions);
          }
          return new ast::If(condition, then, else_block);
+      }
+      if (compound_statement){
+         std::unordered_map<std::string, std::pair<std::string, bool>> new_variable_map = copy_variable_map(variable_map);
+         return new ast::Compound_Statement(resolve_block(compound_statement->block, new_variable_map, expressions));
       }
       return nullptr;
    }
@@ -505,18 +549,18 @@ namespace parser
          {
             throw std::runtime_error("Not a valid block item.");
          }
-         ast::Declaration *resolved_declaration = resolve_declaration(declaration, variable_map, expressions);
-         std::unique_ptr<ast::D> d = std::make_unique<ast::D>(resolved_declaration);
-         delete declaration;
+         // ast::Declaration *resolved_declaration = resolve_declaration(declaration, variable_map, expressions);
+         std::unique_ptr<ast::D> d = std::make_unique<ast::D>(declaration);
+         // delete declaration;
          return d;
       }
       else
       {
          // std::cout << tokens.front() << std::endl;
          ast::Statement *unresolved_statement = parse_statement(tokens, expressions);
-         ast::Statement *resolved_statement = resolve_statement(unresolved_statement, variable_map, expressions);
-         std::unique_ptr<ast::S> s = std::make_unique<ast::S>(resolved_statement);
-         delete unresolved_statement;
+         // ast::Statement *resolved_statement = resolve_statement(unresolved_statement, variable_map, expressions);
+         std::unique_ptr<ast::S> s = std::make_unique<ast::S>(unresolved_statement);
+         // delete unresolved_statement;
          return s;
       }
    }
@@ -532,6 +576,7 @@ namespace parser
       expect(")", tokens);
       expect("{", tokens);
 
+      ast::Block* body;
       std::vector<std::unique_ptr<ast::Block_Item>> function_body;
       std::vector<std::unique_ptr<ast::Expression>> expressions;
       while (tokens.front() != "}")
@@ -539,8 +584,10 @@ namespace parser
          std::unique_ptr<ast::Block_Item> next_block_item = parse_block_item(tokens, expressions);
          function_body.push_back(std::move(next_block_item));
       }
+      body = new ast::Block(std::move(function_body));
+      ast::Block *resolved_body = resolve_block(body, variable_map, expressions);
       expect("}", tokens);
-      ast::Function *func = new ast::Function(func_name, std::move(function_body), std::move(expressions));
+      ast::Function *func = new ast::Function(func_name, resolved_body, std::move(expressions));
       if (!tokens.empty())
       {
          throw std::runtime_error("Extra Characters Found For Minimal Compiler.");
