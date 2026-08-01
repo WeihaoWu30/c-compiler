@@ -30,6 +30,7 @@ namespace aast
       case Size::DWORD:
         return "%eax";
       }
+      break;
     case RegType::DX:
       switch (size_)
       {
@@ -38,6 +39,7 @@ namespace aast
       case Size::DWORD:
         return "%edx";
       }
+      break;
     case RegType::R10:
       switch (size_)
       {
@@ -46,6 +48,7 @@ namespace aast
       case Size::DWORD:
         return "%r10d";
       }
+      break;
     case RegType::R11:
       switch (size_)
       {
@@ -54,6 +57,7 @@ namespace aast
       case Size::DWORD:
         return "%r11d";
       }
+      break;
     case RegType::CX:
       switch (size_)
       {
@@ -62,6 +66,8 @@ namespace aast
       case Size::DWORD:
         return "%ecx";
       }
+      break;
     }
+    return std::string();
   }
 }
