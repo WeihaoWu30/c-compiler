@@ -2,6 +2,7 @@
 #include "ast/top_level/program.hpp"
 #include "tacky/top_level/program.hpp"
 #include "compiler/compiler.hpp"
+#include "compiler/driver.hpp"
 #include <cstring>
 #include <fstream>
 #include <list>
@@ -12,132 +13,167 @@
 #include <stdexcept>
 #include <cstdlib>
 #include <memory>
-
-// Intermediate Files that will be deleted
-#define PPF "preprocessed.i"
-#define AF "assembly.s"
-
-// Prototyping
-void preprocess(char *filename);
-void cleanup();
-void execute(const char *filename);
-int main(int argc, char *argv[]);
-
-/*
-This function calls the GCC driver to remove comments and trims whitespace in the C file provided.
-This makes it easier for the compiler to parse and lex the C file.
-*/
-void preprocess(char *filename)
-{
-  if (!fork())
+#include <vector>
+namespace driver {
+  /*
+  This function calls the GCC driver to remove comments and trims whitespace in the C file provided.
+  This makes it easier for the compiler to parse and lex the C file.
+  */
+  void preprocess(const std::string& filename)
   {
-    execlp("gcc", "gcc", "-E", "-P", filename, "-o", PPF, (char *)nullptr);
-    _exit(1);
+    if (!fork())
+    {
+      execlp("gcc", "gcc", "-E", "-P", filename.c_str(), "-o", PREPROCESSED_FILE.data(), (char *)nullptr);
+      _exit(1);
+    }
+    else
+    {
+      wait(nullptr);
+    }
   }
-  else
-  {
-    wait(nullptr);
-  }
-}
 
-// This function removes the intermediate files
-void cleanup()
-{
-  if (!fork())
+  // This function removes the intermediate files
+  void cleanup(bool remove_object_files, std::vector<char *> &object_filenames)
   {
-    execlp("rm", "rm", PPF, AF, (char *)nullptr);
-    _exit(1);
+    if (!fork())
+    {
+      std::vector<char *> cmd_list{ const_cast<char *>("rm"), const_cast<char *>(PREPROCESSED_FILE.data()), const_cast<char *>(ASSEMBLY_FILE.data()) };
+      if(remove_object_files) {
+        for(char *filename : object_filenames) cmd_list.push_back(filename);
+      }
+      cmd_list.push_back(nullptr);
+      execvp("rm", cmd_list.data());
+      _exit(1);
+    }
+    else
+    {
+      wait(nullptr);
+    }
   }
-  else
-  {
-    wait(nullptr);
-  }
-}
 
-// This function converts Assembly File To Binary Executable
-void execute(const char *filename)
-{
-  if (!fork())
+  // This function converts Assembly File To Binary Executable
+  void convert_to_execute(const std::vector<char *> &cmd_list)
   {
-    execlp("gcc", "gcc", AF, "-o", filename, (char *)nullptr);
-    _exit(1);
+    if (!fork())
+    {
+      execvp("gcc", cmd_list.data());
+      _exit(1);
+    }
+    else
+    {
+      wait(nullptr);
+    }
   }
-  else
+
+  // This function converts Assembly File TO Object File
+  void convert_to_object(const std::string& filename)
   {
-    wait(nullptr);
+    if (!fork())
+    {
+      execlp("gcc", "gcc", "-c", ASSEMBLY_FILE.data(), "-o", filename.c_str(), (char *)nullptr);
+      _exit(1);
+    }
+    else
+    {
+      wait(nullptr);
+    }
   }
 }
 
 int main(int argc, char *argv[])
 {
+  if (argc < 2)
+  {
+    throw std::runtime_error("Missing Filename.");
+  }
   try
   {
-    if (argc < 2)
+    driver::Stage stop = driver::Stage::Full;
+    bool is_binary = true;
+    int i = 1;
+    for (; i < argc; ++i)
     {
-      throw std::runtime_error("Missing Filename.");
-    }
-    std::unique_ptr<ast::Program> program;
-    std::unique_ptr<aast::Program> assembly_program;
-    std::unique_ptr<tacky::Program> tacky_program;
-    if (argc == 3)
-    { // when a flag is specified to the compiler
-      preprocess(argv[2]);
-      std::list<std::string> tokens = lexer::lex(PPF);
-      std::string s(argv[1]); // this is a must since temporary strings are strings and not const chars
-      if (s.compare("--lex") == 0)
-        return 0;
-      if (s.compare("--parse") == 0 || s.compare("--validate") == 0)
-      {
-        program.reset(parser::parse(tokens)); // unique ptr owns raw ptr
-      }
-      else if (s.compare("--tacky") == 0)
-      {
-        program.reset(parser::parse(tokens));
-        tacky_program.reset(ir_gen::generate_tacky(program.get()));
-      }
-      else if (s.compare("--codegen") == 0)
-      {
-        program.reset(parser::parse(tokens));
-        tacky_program.reset(ir_gen::generate_tacky(program.get()));
-        assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
-      }
+      std::string arg(argv[i]);
+      if (arg == "-c")
+        is_binary = false;
+      else if (arg == "--lex")
+        stop = driver::Stage::Lex;
+      else if (arg == "--parse" || arg == "--validate")
+        stop = driver::Stage::Parse;
+      else if (arg == "--tacky")
+        stop = driver::Stage::Tacky;
+      else if (arg == "--codegen")
+        stop = driver::Stage::Codegen;
       else
-      {
-        throw std::runtime_error("Unknown flag: " + s);
-      }
+        break;
     }
-    else
-    {
-      preprocess(argv[1]);
-      std::list<std::string> tokens = lexer::lex(PPF);
+
+    std::list<std::string> tokens;
+    std::unique_ptr<ast::Program> program;
+    std::unique_ptr<tacky::Program> tacky_program;
+    std::unique_ptr<aast::Program> assembly_program;
+    std::ofstream ostr;
+    std::vector<std::string> object_filenames;
+    std::string output_filename;
+    for(;i < argc; ++i) {
+      std::string filename(argv[i]);
+      driver::preprocess(filename);
+      tokens = lexer::lex(std::string(driver::PREPROCESSED_FILE));
+      if (stop == driver::Stage::Lex)
+        continue;
+
       program.reset(parser::parse(tokens));
+      if (stop == driver::Stage::Parse)
+        continue;
+
       tacky_program.reset(ir_gen::generate_tacky(program.get()));
+      if (stop == driver::Stage::Tacky)
+        continue;
+
       assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
-      std::ofstream ostr(AF);
+      if (stop == driver::Stage::Codegen)
+        continue;
+
+      ostr.open(driver::ASSEMBLY_FILE.data());
       if (!ostr)
       {
         throw std::runtime_error("Failed To Open Assembly File");
       }
-
       ostr << *assembly_program; // Writing Assembly To File using Output Stream Extraction Operator Overloading
       ostr.close();
 
-      // This is just for the test cases to pass
-      std::string s(argv[1]);
-      s.erase(s.size() - 2);
-      execute(s.c_str());
-
-#ifndef DEBUG
-      cleanup();
-#endif
+      filename.erase(filename.size() - 2);
+      if(output_filename.empty()) output_filename = filename;
+      filename += ".o";
+      driver::convert_to_object(filename);
+      object_filenames.push_back(filename);
     }
+
+    if(stop != driver::Stage::Full) {
+      return EXIT_SUCCESS;
+    }
+
+    std::vector<char *> object_filenames_as_args;
+    for(const std::string &filename : object_filenames)
+      object_filenames_as_args.push_back(const_cast<char *>(filename.c_str()));
+
+    if (is_binary)
+    {
+      std::vector<char *> cmd_list;
+      cmd_list.push_back(const_cast<char *>("gcc"));
+      cmd_list.insert(cmd_list.end(), object_filenames_as_args.begin(), object_filenames_as_args.end());
+      cmd_list.push_back(const_cast<char *>("-o"));
+      cmd_list.push_back(const_cast<char *>(output_filename.c_str()));
+      cmd_list.push_back(nullptr);
+      driver::convert_to_execute(cmd_list);
+    }
+#ifndef DEBUG
+    driver::cleanup(is_binary, object_filenames_as_args);
+#endif
     return EXIT_SUCCESS;
   }
   catch (const std::exception &e)
   {
-#ifndef DEBUG
-    cleanup();
-#endif
     std::cerr << e.what() << std::endl;
     return EXIT_FAILURE;
   }

@@ -4,6 +4,7 @@
 #include "aast/operands/pseudo.hpp"
 #include "aast/operands/stack.hpp"
 #include "aast/instructions/instructions.hpp"
+#include "aast/top_level/program.hpp"
 #include "tacky/abstract/abstract.hpp"
 #include "tacky/operators/operators.hpp"
 #include "tacky/top_level/top_level.hpp"

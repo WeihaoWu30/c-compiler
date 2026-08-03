@@ -30,5 +30,6 @@ g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g
 - ./bin/zwcc --validate <filename>
 - ./bin/zwcc --tacky <filename>
 - ./bin/zwcc --codegen <filename>
+- ./bin/zwcc -c <filename>
 - ./bin/zwcc <filename>
 
