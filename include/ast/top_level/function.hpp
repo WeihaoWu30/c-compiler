@@ -20,6 +20,7 @@ namespace ast
       Function(Identifier *name_, Block *body_, std::vector<std::unique_ptr<Expression>> expressions_) : name(name_), body(body_), expressions(std::move(expressions_)) {}
       ~Function()
       {
+         delete body;
          delete name;
       }
    };

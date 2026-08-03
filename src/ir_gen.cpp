@@ -1,3 +1,4 @@
+#include "ast/for_inits/init_decl.hpp"
 #include "tacky/tacky.hpp"
 #include "ast/ast.hpp"
 #include "compiler/ir_gen.hpp"
@@ -109,20 +110,16 @@ namespace ir_gen
    // This function is recursive and converts AST expressions to Tacky Values
    tacky::Val *emit_tacky(ast::Expression *e, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values)
    {
+      if(!e) return nullptr;
       ast::Constant *constant = dynamic_cast<ast::Constant *>(e);
-      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
-      ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
-      ast::Var *var = dynamic_cast<ast::Var *>(e);
-      ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
-      ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
-      ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
       if (constant)
       {
          std::unique_ptr<tacky::Constant> t_constant = std::make_unique<tacky::Constant>(constant->val);
          values.push_back(std::move(t_constant));
          return values.back().get();
       }
-      else if (unary)
+      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
+      if (unary)
       {
          tacky::Val *src = emit_tacky(unary->exp, instructions, values);
          tacky::Identifier *dst_name = make_identifier();
@@ -133,7 +130,8 @@ namespace ir_gen
          values.push_back(std::move(dst));
          return values.back().get();
       }
-      else if (binary && binary->binary_operator == ast::Binary_Operator::And)
+      ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
+      if (binary && binary->binary_operator == ast::Binary_Operator::And)
       {
          tacky::Val *left = emit_tacky(binary->left, instructions, values);
          tacky::Identifier *left_false_identifier = new tacky::Identifier("false" + std::to_string(label_counter++));
@@ -235,7 +233,31 @@ namespace ir_gen
          instructions.push_back(std::move(new_binary));
          return values.back().get();
       }
-      else if (compound)
+      ast::Var *var = dynamic_cast<ast::Var *>(e);
+      if (var)
+      {
+         tacky::Identifier *var_identifier = new tacky::Identifier(var->identifier->name);
+         std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(var_identifier);
+         values.push_back(std::move(variable));
+         return values.back().get();
+      }
+      ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
+      if (assignment)
+      {
+         ast::Var *v = dynamic_cast<ast::Var *>(assignment->lvalue);
+         if (v)
+         {
+            tacky::Val *result = emit_tacky(assignment->exp, instructions, values);
+            tacky::Identifier *identifer = new tacky::Identifier(v->identifier->name);
+            std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(identifer);
+            std::unique_ptr<tacky::Copy> copy = std::make_unique<tacky::Copy>(result, variable.get());
+            instructions.push_back(std::move(copy));
+            values.push_back(std::move(variable));
+            return values.back().get();
+         }
+      }
+      ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
+      if (compound)
       {
          ast::Var *v = dynamic_cast<ast::Var *>(compound->left);
          if (v)
@@ -253,28 +275,8 @@ namespace ir_gen
             return dst;
          }
       }
-      else if (var)
-      {
-         tacky::Identifier *var_identifier = new tacky::Identifier(var->identifier->name);
-         std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(var_identifier);
-         values.push_back(std::move(variable));
-         return values.back().get();
-      }
-      else if (assignment)
-      {
-         ast::Var *v = dynamic_cast<ast::Var *>(assignment->lvalue);
-         if (v)
-         {
-            tacky::Val *result = emit_tacky(assignment->exp, instructions, values);
-            tacky::Identifier *identifer = new tacky::Identifier(v->identifier->name);
-            std::unique_ptr<tacky::Var> variable = std::make_unique<tacky::Var>(identifer);
-            std::unique_ptr<tacky::Copy> copy = std::make_unique<tacky::Copy>(result, variable.get());
-            instructions.push_back(std::move(copy));
-            values.push_back(std::move(variable));
-            return values.back().get();
-         }
-      }
-      else if (conditional)
+      ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
+      if (conditional)
       {
          // emit instructions for the condition
          tacky::Val *condition_result = emit_tacky(conditional->condition, instructions, values);
@@ -327,21 +329,20 @@ namespace ir_gen
    void emit_tacky_statements(ast::Statement *s, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values, bool &has_return)
    {
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s);
-      ast::Return *ret = dynamic_cast<ast::Return *>(s);
-      ast::If *if_statement = dynamic_cast<ast::If *>(s);
-      ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(s);
-
       if (exp_statement)
       {
          emit_tacky(exp_statement->exp, instructions, values);
+         return;
       }
-      else if (ret) // standalone return statements
+      ast::Return *ret = dynamic_cast<ast::Return *>(s);
+      if (ret) // standalone return statements
       {
          std::unique_ptr<tacky::Return> t_return = std::make_unique<tacky::Return>(emit_tacky(ret->exp, instructions, values));
          instructions.push_back(std::move(t_return));
+         return;
       }
-
-      else if (if_statement)
+      ast::If *if_statement = dynamic_cast<ast::If *>(s);
+      if (if_statement)
       {
          if (!(if_statement->else_statement))
          {
@@ -388,8 +389,10 @@ namespace ir_gen
                has_return = true;
             }
          }
+         return;
       }
-      else if (compound_statement)
+      ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(s);
+      if (compound_statement)
       {
          for (std::unique_ptr<ast::Block_Item> &b : compound_statement->block->block_items)
          {
@@ -404,28 +407,131 @@ namespace ir_gen
             }
             else if (s)
             {
-               ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
-               ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
-               ast::If *if_statement = dynamic_cast<ast::If *>(s->statement);
-               ast::Compound_Statement *inner_compound_statement = dynamic_cast<ast::Compound_Statement *>(s->statement);
-               if (exp_statement)
-               {
-                  emit_tacky_statements(exp_statement, instructions, values, has_return);
-               }
-               else if (ret)
-               {
-                  emit_tacky_statements(ret, instructions, values, has_return);
-                  // return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
-               }
-               else if (if_statement)
-               {
-                  emit_tacky_statements(if_statement, instructions, values, has_return);
-               }
-               else if (inner_compound_statement){
-                  emit_tacky_statements(inner_compound_statement, instructions, values, has_return);
-               }
+               emit_tacky_statements(s->statement, instructions, values, has_return);
             }
          }
+         return;
+      }
+      ast::Break *break_statement = dynamic_cast<ast::Break *>(s);
+      if(break_statement)
+      {
+         tacky::Identifier *break_identifier = new tacky::Identifier("break_" + break_statement->label->name);
+         std::unique_ptr<tacky::Jump> break_jump = std::make_unique<tacky::Jump>(break_identifier);
+         instructions.push_back(std::move(break_jump));
+         return;
+      }
+      ast::Continue *continue_statement = dynamic_cast<ast::Continue *>(s);
+      if(continue_statement)
+      {
+         tacky::Identifier *continue_identifier = new tacky::Identifier("continue_" + continue_statement->label->name);
+         std::unique_ptr<tacky::Jump> continue_jump = std::make_unique<tacky::Jump>(continue_identifier);
+         instructions.push_back(std::move(continue_jump));
+         return;
+      }
+      ast::DoWhile *do_while_statement = dynamic_cast<ast::DoWhile *>(s);
+      if(do_while_statement)
+      {
+         // branch name
+         tacky::Identifier *start_label_identifier = new tacky::Identifier("do_while_start_" + do_while_statement->label->name);
+         std::unique_ptr<tacky::Label> start_label = std::make_unique<tacky::Label>(start_label_identifier);
+         instructions.push_back(std::move(start_label));
+
+         // branch instructions
+         emit_tacky_statements(do_while_statement->body, instructions, values, has_return);
+
+         // continue jump start
+         tacky::Identifier *continue_identifier = new tacky::Identifier("continue_" + do_while_statement->label->name);
+         std::unique_ptr<tacky::Label> continue_label = std::make_unique<tacky::Label>(continue_identifier);
+         instructions.push_back(std::move(continue_label));
+
+         // branch condition, jump to start if condition is not zero
+         tacky::Val *condiiton_result = emit_tacky(do_while_statement->condition, instructions, values);
+         tacky::Identifier *jmp_identifier = new tacky::Identifier(start_label_identifier->name);
+         std::unique_ptr<tacky::JumpIfNotZero> start_jmp = std::make_unique<tacky::JumpIfNotZero>(condiiton_result, jmp_identifier);
+         instructions.push_back(std::move(start_jmp));
+
+         // break jump
+         tacky::Identifier *break_identifier = new tacky::Identifier("break_" + do_while_statement->label->name);
+         std::unique_ptr<tacky::Label> break_label = std::make_unique<tacky::Label>(break_identifier);
+         instructions.push_back(std::move(break_label));
+         return;
+      }
+      ast::While *while_statement = dynamic_cast<ast::While *>(s);
+      if(while_statement)
+      {
+         // branch name
+         tacky::Identifier *continue_identifier = new tacky::Identifier("continue_" + while_statement->label->name);
+         std::unique_ptr<tacky::Label> continue_label = std::make_unique<tacky::Label>(continue_identifier);
+         instructions.push_back(std::move(continue_label));
+
+         // branch condition
+         tacky::Val *condition_result = emit_tacky(while_statement->condition, instructions, values);
+         tacky::Identifier *jmp_end_identifier = new tacky::Identifier("break_" + while_statement->label->name);
+         std::unique_ptr<tacky::JumpIfZero> end_jmp = std::make_unique<tacky::JumpIfZero>(condition_result, jmp_end_identifier);
+         instructions.push_back(std::move(end_jmp));
+
+         // branch instructions
+         emit_tacky_statements(while_statement->body, instructions, values, has_return);
+
+         // jump to start
+         tacky::Identifier *jmp_start_identifier = new tacky::Identifier(continue_identifier->name);
+         std::unique_ptr<tacky::Jump> jmp_start = std::make_unique<tacky::Jump>(jmp_start_identifier);
+         instructions.push_back(std::move(jmp_start));
+
+         // end label
+         tacky::Identifier *break_label_identifier = new tacky::Identifier(jmp_end_identifier->name);
+         std::unique_ptr<tacky::Label> break_label = std::make_unique<tacky::Label>(break_label_identifier);
+         instructions.push_back(std::move(break_label));
+         return;
+      }
+      ast::For *for_statement = dynamic_cast<ast::For *>(s);
+      if(for_statement)
+      {
+         // initialization
+         ast::For_Init *for_init = for_statement->init;
+         ast::Init_Decl *init_declaration = dynamic_cast<ast::Init_Decl *>(for_init);
+         ast::Init_Exp *init_expression = dynamic_cast<ast::Init_Exp *>(for_init);
+         if(init_declaration)
+         {
+            emit_tacky(init_declaration->declaration->init, instructions, values);
+         } else if(init_expression) {
+            emit_tacky(init_expression->expression, instructions, values);
+         }
+
+         // branch name
+         tacky::Identifier *start_label_identifier = new tacky::Identifier("for_start_" + for_statement->label->name);
+         std::unique_ptr<tacky::Label> start_label = std::make_unique<tacky::Label>(start_label_identifier);
+         instructions.push_back(std::move(start_label));
+
+         // branch condition
+         tacky::Val *condition_result = emit_tacky(for_statement->condition, instructions, values);
+         if(condition_result) {
+            tacky::Identifier *jmp_end_identifier = new tacky::Identifier("break_" + for_statement->label->name);
+            std::unique_ptr<tacky::JumpIfZero> end_jmp = std::make_unique<tacky::JumpIfZero>(condition_result, jmp_end_identifier);
+            instructions.push_back(std::move(end_jmp));
+         }
+
+         // branch instructions
+         emit_tacky_statements(for_statement->body, instructions, values, has_return);
+
+         // continue label
+         tacky::Identifier *continue_identifier = new tacky::Identifier("continue_" + for_statement->label->name);
+         std::unique_ptr<tacky::Label> continue_label = std::make_unique<tacky::Label>(continue_identifier);
+         instructions.push_back(std::move(continue_label));
+
+         // post instructions
+         emit_tacky(for_statement->post, instructions, values);
+
+         // jump to start
+         tacky::Identifier *jmp_start_identifier = new tacky::Identifier(start_label_identifier->name);
+         std::unique_ptr<tacky::Jump> jmp_start = std::make_unique<tacky::Jump>(jmp_start_identifier);
+         instructions.push_back(std::move(jmp_start));
+
+         // break label
+         tacky::Identifier *break_label_identifier = new tacky::Identifier("break_" + for_statement->label->name);
+         std::unique_ptr<tacky::Label> break_label = std::make_unique<tacky::Label>(break_label_identifier);
+         instructions.push_back(std::move(break_label));
+         return;
       }
    }
 
@@ -450,25 +556,11 @@ namespace ir_gen
          }
          else if (s)
          {
-            ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(s->statement);
+            emit_tacky_statements(s->statement, instructions, values, has_return);
             ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
-            ast::If *if_statement = dynamic_cast<ast::If *>(s->statement);
-            ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(s->statement);
-            if (exp_statement)
+            if (ret)
             {
-               emit_tacky_statements(exp_statement, instructions, values, has_return);
-            }
-            else if (ret)
-            {
-               emit_tacky_statements(ret, instructions, values, has_return);
                return new tacky::Function(t_identifier, std::move(instructions), std::move(values));
-            }
-            else if (if_statement)
-            {
-               emit_tacky_statements(if_statement, instructions, values, has_return);
-            }
-            else if (compound_statement){
-               emit_tacky_statements(compound_statement, instructions, values, has_return);
             }
          }
       }

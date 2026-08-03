@@ -4,3 +4,8 @@
 #include "ast/statements/null.hpp"
 #include "ast/statements/if.hpp"
 #include "ast/statements/compound_statement.hpp"
+#include "ast/statements/for.hpp"
+#include "ast/statements/while.hpp"
+#include "ast/statements/do_while.hpp"
+#include "ast/statements/break.hpp"
+#include "ast/statements/continue.hpp"

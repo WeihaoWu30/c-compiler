@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
       std::string s(argv[1]); // this is a must since temporary strings are strings and not const chars
       if (s.compare("--lex") == 0)
         return 0;
-      if (s.compare("--parse") == 0)
+      if (s.compare("--parse") == 0 || s.compare("--validate") == 0)
       {
         program.reset(parser::parse(tokens)); // unique ptr owns raw ptr
       }
