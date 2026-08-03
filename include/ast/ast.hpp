@@ -6,3 +6,4 @@
 #include "ast/top_level/top_level.hpp"
 #include "ast/block_items/block_items.hpp"
 #include "ast/block/block.hpp"
+#include "ast/for_inits/for_inits.hpp"

@@ -9,7 +9,7 @@ namespace ast
    {
       Identifier *name;
       Expression *init;
-      Declaration(Identifier *name_, Expression *init_ = NULL) : name(name_), init(init_) {};
+      Declaration(Identifier *name_, Expression *init_ = nullptr) : name(name_), init(init_) {};
       ~Declaration()
       {
          delete name;

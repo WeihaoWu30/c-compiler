@@ -32,6 +32,8 @@ namespace codegen
       std::unique_ptr<aast::Pseudo> pseudo_identifier = std::make_unique<aast::Pseudo>(assembly_identifier);
       operands.push_back(std::move(pseudo_identifier));
       return operands.back().get();
+    } else {
+      throw std::runtime_error("Tacky Value cannot be read as an operand.");
     }
     return nullptr;
   }

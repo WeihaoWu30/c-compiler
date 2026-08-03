@@ -18,8 +18,9 @@ namespace aast
 
   std::ostream &operator<<(std::ostream &ostr, const Function &function)
   {
-    ostr << "\t" << ".globl _" << *function.name << std::endl;
-    ostr << "_" << *function.name << ":" << std::endl;
+    // Add underscore before function name for macos
+    ostr << "\t" << ".globl " << *function.name << std::endl;
+    ostr << *function.name << ":" << std::endl;
     ostr << "\t" << "pushq\t%rbp" << std::endl;
     ostr << "\t" << "movq\t%rsp, %rbp" << std::endl;
 

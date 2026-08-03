@@ -11,10 +11,15 @@
 
 namespace lexer
 {
-  std::array<std::regex, 47> patterns = {std::regex("int\\b"),
+  std::array<std::regex, 52> patterns = {std::regex("int\\b"),
                                          std::regex("void\\b"),
                                          std::regex("return\\b"),
                                          std::regex("typedef\\b"),
+                                         std::regex("do\\b"),
+                                         std::regex("while\\b"),
+                                         std::regex("for\\b"),
+                                         std::regex("break\\b"),
+                                         std::regex("continue\\b"),
                                          std::regex("if\\b"),
                                          std::regex("else\\b"),
                                          std::regex("[0-9]+\\b"),

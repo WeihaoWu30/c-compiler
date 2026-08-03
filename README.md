@@ -27,6 +27,7 @@ g++ -std=c++20 -Iinclude src/*.cpp -o bin/zwcc -Wall -Wextra -g
 ## Compiler Options
 - ./bin/zwcc --lex <filename>
 - ./bin/zwcc --parse <filename>
+- ./bin/zwcc --validate <filename>
 - ./bin/zwcc --tacky <filename>
 - ./bin/zwcc --codegen <filename>
 - ./bin/zwcc <filename>
