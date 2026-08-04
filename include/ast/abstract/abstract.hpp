@@ -3,3 +3,4 @@
 #include "ast/abstract/statement.hpp"
 #include "ast/abstract/block_item.hpp"
 #include "ast/abstract/for_init.hpp"
+#include "ast/abstract/declaration.hpp"
