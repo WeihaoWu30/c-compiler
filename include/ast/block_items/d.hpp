@@ -1,6 +1,6 @@
 #pragma once
 #include "ast/abstract/block_item.hpp"
-#include "ast/top_level/declaration.hpp"
+#include "ast/abstract/declaration.hpp"
 
 namespace ast
 {

@@ -9,6 +9,8 @@
 #include "ast/operators/operators.hpp"
 #include "ast/statements/return.hpp"
 #include "ast/top_level/top_level.hpp"
+#include "ast/declarations/fun_decl.hpp"
+#include "ast/block/block.hpp"
 #include <memory>
 #include <utility>
 
@@ -46,7 +48,7 @@ namespace parser
                                                                  "^",
                                                                  "?"};
 
-  extern std::unordered_map<std::string, std::pair<std::string, bool>> variable_map;
+  extern std::unordered_map<std::string, std::pair<std::string, bool>> declaration_map; // formerly known as variable_map
   extern std::unordered_map<std::string, std::string> symbol_table;
   extern uint32_t var_counter;
   void expect(std::string expected, std::list<std::string> &tokens);
@@ -54,6 +56,7 @@ namespace parser
   std::string make_temporary(std::string s);
   ast::Identifier *make_label();
   ast::Identifier *make_label(std::string label);
+  std::unordered_map<std::string, std::pair<std::string, bool>> copy_declaration_map(std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map);
   ast::Unary_Operator parse_unop(std::list<std::string> &tokens);
   ast::Compound_Operator parse_comop(std::list<std::string> &tokens);
   ast::Binary_Operator parse_binop(std::list<std::string> &tokens);
@@ -64,15 +67,15 @@ namespace parser
   ast::Statement *parse_statement(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   ast::Declaration *parse_declaration(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   std::unique_ptr<ast::Block_Item> parse_block_item(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::Block *resolve_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::Expression *resolve_optional_exp(ast::Expression *exp, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
-  ast::For_Init *resolve_for_init(ast::For_Init *init, std::unordered_map<std::string, std::pair<std::string, bool>> &variable_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::Block *resolve_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::Expression *resolve_optional_exp(ast::Expression *exp, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
+  ast::For_Init *resolve_for_init(ast::For_Init *init, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions);
   ast::Statement *annotate(ast::Statement *statement, ast::Identifier *current_label);
   ast::Statement *label_statement(ast::Statement *statement, ast::Identifier *current_label);
   ast::Block *label_block(ast::Block *block, ast::Identifier *current_label);
-  ast::Function *parse_function(std::list<std::string> &tokens);
+  std::vector<std::unique_ptr<ast::Fun_Decl>> parse_program(std::list<std::string> &tokens);
   ast::Program *parse(std::list<std::string> &tokens);
 }
