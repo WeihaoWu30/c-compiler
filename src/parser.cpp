@@ -18,8 +18,9 @@
 namespace parser
 {
    // For Parsing Expressions
-   std::unordered_map<std::string, std::pair<std::string, bool>> declaration_map; // formerly known as variable_map
-   std::unordered_map<std::string, std::string> symbol_table;
+   std::unordered_map<std::string, MapEntry> identifier_map; // formerly known as variable_map
+   std::unordered_map<std::string, std::string> symbol_table; // maps types to typedef aliases
+   std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> symbols; // maps variable names to types
    uint32_t var_counter = 0;
 
    // This Function Matches A Token Against Legal Syntax
@@ -58,10 +59,10 @@ namespace parser
       return new ast::Identifier(label);
    }
 
-   std::unordered_map<std::string, std::pair<std::string, bool>> copy_declaration_map(std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map) {
-      std::unordered_map<std::string, std::pair<std::string, bool>> duplicate(declaration_map);
-      for ( auto &[real_name, scope] : duplicate) {
-         scope.second = false;
+   std::unordered_map<std::string, MapEntry> copy_identifier_map(std::unordered_map<std::string, MapEntry> &identifier_map) {
+      std::unordered_map<std::string, MapEntry> duplicate(identifier_map);
+      for ( auto &[identifier_name, map_entry] : duplicate) {
+         map_entry.from_current_scope = false;
       }
       return duplicate;
    }
@@ -545,7 +546,7 @@ namespace parser
       }
    }
 
-   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Expression *resolve_exp(ast::Expression *e, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
       if (assignment)
@@ -555,8 +556,8 @@ namespace parser
          {
             throw std::runtime_error("Invalid lvalue.");
          }
-         ast::Expression *lvalue = resolve_exp(assignment->lvalue, declaration_map, expressions);
-         ast::Expression *exp = resolve_exp(assignment->exp, declaration_map, expressions);
+         ast::Expression *lvalue = resolve_exp(assignment->lvalue, identifier_map, expressions);
+         ast::Expression *exp = resolve_exp(assignment->exp, identifier_map, expressions);
          std::unique_ptr<ast::Assignment> a = std::make_unique<ast::Assignment>(lvalue, exp);
          expressions.push_back(std::move(a));
          return expressions.back().get();
@@ -569,8 +570,8 @@ namespace parser
          {
             throw std::runtime_error("Invalid lvalue.");
          }
-         ast::Expression *left = resolve_exp(compound->left, declaration_map, expressions);
-         ast::Expression *right = resolve_exp(compound->right, declaration_map, expressions);
+         ast::Expression *left = resolve_exp(compound->left, identifier_map, expressions);
+         ast::Expression *right = resolve_exp(compound->right, identifier_map, expressions);
          std::unique_ptr<ast::Compound> c = std::make_unique<ast::Compound>(compound->compound_operator, left, right);
          expressions.push_back(std::move(c));
          return expressions.back().get();
@@ -578,16 +579,16 @@ namespace parser
       ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
       if (binary)
       {
-         ast::Expression *left = resolve_exp(binary->left, declaration_map, expressions);
-         ast::Expression *right = resolve_exp(binary->right, declaration_map, expressions);
+         ast::Expression *left = resolve_exp(binary->left, identifier_map, expressions);
+         ast::Expression *right = resolve_exp(binary->right, identifier_map, expressions);
          std::unique_ptr<ast::Binary> b = std::make_unique<ast::Binary>(binary->binary_operator, left, right);
          expressions.push_back(std::move(b));
          return expressions.back().get();
       }
-      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);\
+      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
       if (unary)
       {
-         ast::Expression *exp = resolve_exp(unary->exp, declaration_map, expressions);
+         ast::Expression *exp = resolve_exp(unary->exp, identifier_map, expressions);
          std::unique_ptr<ast::Unary> u = std::make_unique<ast::Unary>(unary->unary_operator, exp);
          expressions.push_back(std::move(u));
          return expressions.back().get();
@@ -595,98 +596,145 @@ namespace parser
       ast::Var *var = dynamic_cast<ast::Var *>(e);
       if (var)
       {
-         if (declaration_map.count(var->identifier->name))
+         if (identifier_map.count(var->identifier->text))
          {
-            std::unique_ptr<ast::Var> v = std::make_unique<ast::Var>(new ast::Identifier(declaration_map[var->identifier->name].first));
+            std::unique_ptr<ast::Var> v = std::make_unique<ast::Var>(new ast::Identifier(identifier_map[var->identifier->text].new_name));
             expressions.push_back(std::move(v));
             return expressions.back().get();
          }
          else
          {
-            throw std::runtime_error(std::format("{} is an undeclared variable.", var->identifier->name));
+            throw std::runtime_error(std::format("{} is an undeclared variable.", var->identifier->text));
          }
       }
       ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
       if (conditional)
       {
-         ast::Expression *condition = resolve_exp(conditional->condition, declaration_map, expressions);
-         ast::Expression *left = resolve_exp(conditional->left, declaration_map, expressions);
-         ast::Expression *right = resolve_exp(conditional->right, declaration_map, expressions);
+         ast::Expression *condition = resolve_exp(conditional->condition, identifier_map, expressions);
+         ast::Expression *left = resolve_exp(conditional->left, identifier_map, expressions);
+         ast::Expression *right = resolve_exp(conditional->right, identifier_map, expressions);
          std::unique_ptr<ast::Conditional> c = std::make_unique<ast::Conditional>(condition, left, right);
          expressions.push_back(std::move(c));
          return expressions.back().get();
       }
       ast::Function_Call *function_call = dynamic_cast<ast::Function_Call *>(e);
       if(function_call) {
-         ast::Identifier *function_name = new ast::Identifier(function_call->identifier->name);
-         std::vector<ast::Expression *> args;
-         for(auto &arg: function_call->args) {
-            args.push_back(resolve_exp(arg, declaration_map, expressions));
+         if(identifier_map.count(function_call->identifier->text)) 
+         {
+            ast::Identifier *function_name = new ast::Identifier(identifier_map[function_call->identifier->text].new_name);
+            std::vector<ast::Expression *> args;
+            for(auto &arg: function_call->args) {
+               args.push_back(resolve_exp(arg, identifier_map, expressions));
+            }
+            std::unique_ptr<ast::Function_Call> resolved_function_call = std::make_unique<ast::Function_Call>(function_name, args);
+            expressions.push_back(std::move(resolved_function_call));
+            return expressions.back().get();
          }
-         std::unique_ptr<ast::Function_Call> resolved_function_call = std::make_unique<ast::Function_Call>(function_name, args);
-         expressions.push_back(std::move(resolved_function_call));
-         return expressions.back().get();
+         else 
+         {
+            throw std::runtime_error(std::format("{} is an undeclared function.", function_call->identifier->text));
+         }
       }
       return e;
    }
 
-   ast::Block *resolve_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions){
+   ast::Block *resolve_block(ast::Block *block, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions, bool is_file_scope){
       std::vector<std::unique_ptr<ast::Block_Item>> resolved_items;
       for (auto &item: block->block_items){
          ast::D *d = dynamic_cast<ast::D *>(item.get());
          ast::S *s = dynamic_cast<ast::S *>(item.get());
 
          if (d){
-            ast::Declaration *resolved_declaration = resolve_declaration(d->declaration, declaration_map, expressions);
+            ast::Declaration *resolved_declaration = resolve_declaration(d->declaration, identifier_map, expressions, is_file_scope);
             resolved_items.push_back(std::make_unique<ast::D>(resolved_declaration));
          }
          else if (s){
-            ast::Statement *resolved_statement = resolve_statement(s->statement, declaration_map, expressions);
+            ast::Statement *resolved_statement = resolve_statement(s->statement, identifier_map, expressions);
             resolved_items.push_back(std::make_unique<ast::S>(resolved_statement));
          }
       }
       return new ast::Block(std::move(resolved_items));
    }
 
-   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Declaration *resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions, bool is_file_scope)
    {
-      if (declaration_map.count(declaration->name->name) && declaration_map[declaration->name->name].second)
-      {
-         throw std::runtime_error(std::format("{} has already been declared.", declaration->name->name));
-      }
       ast::Var_Decl *var_decl = dynamic_cast<ast::Var_Decl *>(declaration);
       ast::Fun_Decl *fun_decl = dynamic_cast<ast::Fun_Decl *>(declaration);
       if(var_decl) {
-         std::string unique_name = make_temporary(declaration->name->name);
-         declaration_map[declaration->name->name] = std::make_pair(unique_name, true);
-         ast::Identifier *unique_name_identifier = new ast::Identifier(unique_name);
-         ast::Expression *prev_init = var_decl->init;
-         if (prev_init)
-         {
-            prev_init = resolve_exp(prev_init, declaration_map, expressions);
-         }
-         return new ast::Var_Decl(unique_name_identifier, prev_init);
+         return resolve_var_decl(var_decl, identifier_map, expressions);
       }
-      ast::Block *resolved_body = nullptr;
-      if(fun_decl->body) {
-         resolved_body = resolve_block(fun_decl->body, declaration_map, expressions);
+      if(fun_decl) {
+         return resolve_fun_decl(fun_decl, identifier_map, expressions, is_file_scope);
       }
-      // expressions owned by fun_decl so copy by value is fine, also we cant resolve them here as they would have no context for the resolution
-      ast::Fun_Decl *resolved_fun_decl = new ast::Fun_Decl(new ast::Identifier(declaration->name->name), std::move(fun_decl->params), std::move(fun_decl->expressions), resolved_body); 
-      return resolved_fun_decl;
+      return nullptr;
    }
 
-   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
+   ast::Var_Decl *resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
+      if (identifier_map.count(var_decl->name->text) && identifier_map[var_decl->name->text].from_current_scope)
+      {
+         throw std::runtime_error(std::format("{} has already been declared.", var_decl->name->text));
+      }
+      std::string unique_name = make_temporary(var_decl->name->text);
+      identifier_map.insert_or_assign(var_decl->name->text, MapEntry{ unique_name, true, false });
+      ast::Identifier *unique_name_identifier = new ast::Identifier(unique_name);
+      ast::Expression *prev_init = var_decl->init;
+      if (prev_init)
+      {
+         prev_init = resolve_exp(prev_init, identifier_map, expressions);
+      }
+      return new ast::Var_Decl(unique_name_identifier, prev_init);
+   }
+
+   ast::Fun_Decl *resolve_fun_decl(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions, bool is_file_scope) {
+      if(identifier_map.count(fun_decl->name->text))
+      {
+         MapEntry& prev_entry = identifier_map[fun_decl->name->text];
+         if(prev_entry.from_current_scope && !prev_entry.has_linkage) {
+            throw std::runtime_error(std::format("The function {} has already been declared.", fun_decl->name->text));
+         }
+      }
+
+      identifier_map.insert_or_assign(fun_decl->name->text, MapEntry{ fun_decl->name->text, true, true });
+
+      std::unordered_map<std::string, MapEntry> inner_map = copy_identifier_map(identifier_map);
+      std::vector<std::unique_ptr<ast::Identifier>> new_params;
+      for (auto& param : fun_decl->params)
+      {
+         new_params.emplace_back(resolve_params(param.get(), inner_map));
+      }
+      ast::Block *new_body = nullptr;
+      if(fun_decl->body) {
+         if(!is_file_scope) {
+            throw std::runtime_error("Function definitions are not supported in this scope.");
+         }
+         new_body = resolve_block(fun_decl->body, inner_map, expressions, false);
+      }
+
+      return new ast::Fun_Decl(new ast::Identifier(fun_decl->name->text), std::move(new_params), std::move(fun_decl->expressions), new_body);
+   }
+
+   ast::Identifier *resolve_params(ast::Identifier *identifier, std::unordered_map<std::string, MapEntry> &identifier_map) {
+      if (identifier_map.count(identifier->text) && identifier_map[identifier->text].from_current_scope)
+      {
+         throw std::runtime_error(std::format("The parameter {} has already been declared.", identifier->text));
+      }
+
+      std::string unique_name = make_temporary(identifier->text);
+      identifier_map.insert_or_assign(identifier->text, MapEntry{ unique_name, true, false });
+      return new ast::Identifier(unique_name);
+   }
+
+   ast::Statement *resolve_statement(ast::Statement *statement, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions)
    {
       ast::Return *ret = dynamic_cast<ast::Return *>(statement);
       if (ret)
       {
-         return new ast::Return(resolve_exp(ret->exp, declaration_map, expressions));
+         return new ast::Return(resolve_exp(ret->exp, identifier_map, expressions));
       }
       ast::Expression_Statement *exp_statement = dynamic_cast<ast::Expression_Statement *>(statement);
       if (exp_statement)
       {
-         return new ast::Expression_Statement(resolve_exp(exp_statement->exp, declaration_map, expressions));
+         return new ast::Expression_Statement(resolve_exp(exp_statement->exp, identifier_map, expressions));
       }
       ast::Null *null = dynamic_cast<ast::Null *>(statement);
       if (null)
@@ -696,66 +744,66 @@ namespace parser
       ast::If *if_statement = dynamic_cast<ast::If *>(statement);
       if (if_statement)
       {
-         ast::Expression *condition = resolve_exp(if_statement->condition, declaration_map, expressions);
-         ast::Statement *then = resolve_statement(if_statement->then_statement, declaration_map, expressions);
+         ast::Expression *condition = resolve_exp(if_statement->condition, identifier_map, expressions);
+         ast::Statement *then = resolve_statement(if_statement->then_statement, identifier_map, expressions);
          ast::Statement *else_block = nullptr;
          if (if_statement->else_statement)
          {
-            else_block = resolve_statement(if_statement->else_statement, declaration_map, expressions);
+            else_block = resolve_statement(if_statement->else_statement, identifier_map, expressions);
          }
          return new ast::If(condition, then, else_block);
       }
       ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(statement);
       if (compound_statement){
-         std::unordered_map<std::string, std::pair<std::string, bool>> new_declaration_map = copy_declaration_map(declaration_map);
-         return new ast::Compound_Statement(resolve_block(compound_statement->block, new_declaration_map, expressions));
+         std::unordered_map<std::string, MapEntry> new_identifier_map = copy_identifier_map(identifier_map);
+         return new ast::Compound_Statement(resolve_block(compound_statement->block, new_identifier_map, expressions, false));
       }
       ast::Break *break_statement = dynamic_cast<ast::Break *>(statement);
       if (break_statement) {
-         return new ast::Break(make_label(break_statement->label->name));
+         return new ast::Break(make_label(break_statement->label->text));
       }
       ast::Continue *continue_statement = dynamic_cast<ast::Continue *>(statement);
       if (continue_statement) {
-         return new ast::Continue(make_label(continue_statement->label->name));
+         return new ast::Continue(make_label(continue_statement->label->text));
       }
       ast::For *for_statement = dynamic_cast<ast::For *>(statement);
       if (for_statement) {
-         std::unordered_map<std::string, std::pair<std::string, bool>> new_declaration_map = copy_declaration_map(declaration_map);
-         ast::For_Init *for_init = resolve_for_init(for_statement->init, new_declaration_map, expressions);
-         ast::Expression *condition = resolve_optional_exp(for_statement->condition, new_declaration_map, expressions);
-         ast::Expression *post = resolve_optional_exp(for_statement->post, new_declaration_map, expressions);
-         ast::Statement *body = resolve_statement(for_statement->body, new_declaration_map, expressions);
-         return new ast::For(for_init, body, make_label(for_statement->label->name), condition, post);
+         std::unordered_map<std::string, MapEntry> new_identifier_map = copy_identifier_map(identifier_map);
+         ast::For_Init *for_init = resolve_for_init(for_statement->init, new_identifier_map, expressions);
+         ast::Expression *condition = resolve_optional_exp(for_statement->condition, new_identifier_map, expressions);
+         ast::Expression *post = resolve_optional_exp(for_statement->post, new_identifier_map, expressions);
+         ast::Statement *body = resolve_statement(for_statement->body, new_identifier_map, expressions);
+         return new ast::For(for_init, body, make_label(for_statement->label->text), condition, post);
       }
       ast::While *while_statement = dynamic_cast<ast::While *>(statement);
       if (while_statement) {
-         ast::Expression *condition = resolve_exp(while_statement->condition, declaration_map, expressions);
-         ast::Statement *body = resolve_statement(while_statement->body, declaration_map, expressions);
-         return new ast::While(condition, body, make_label(while_statement->label->name));
+         ast::Expression *condition = resolve_exp(while_statement->condition, identifier_map, expressions);
+         ast::Statement *body = resolve_statement(while_statement->body, identifier_map, expressions);
+         return new ast::While(condition, body, make_label(while_statement->label->text));
       }
       ast::DoWhile *do_while_statement = dynamic_cast<ast::DoWhile *>(statement);
       if (do_while_statement) {
-         ast::Statement *body = resolve_statement(do_while_statement->body, declaration_map, expressions);
-         ast::Expression *condition = resolve_exp(do_while_statement->condition, declaration_map, expressions);
-         return new ast::DoWhile(body, condition, make_label(do_while_statement->label->name));
+         ast::Statement *body = resolve_statement(do_while_statement->body, identifier_map, expressions);
+         ast::Expression *condition = resolve_exp(do_while_statement->condition, identifier_map, expressions);
+         return new ast::DoWhile(body, condition, make_label(do_while_statement->label->text));
       }
       return nullptr;  
    }
 
-   ast::For_Init *resolve_for_init(ast::For_Init *init, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
+   ast::For_Init *resolve_for_init(ast::For_Init *init, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
       ast::Init_Decl *init_decl = dynamic_cast<ast::Init_Decl *>(init);
       ast::Init_Exp *init_exp = dynamic_cast<ast::Init_Exp *>(init);
       if(init_decl) {
-         return new ast::Init_Decl(dynamic_cast<ast::Var_Decl *>(resolve_declaration(init_decl->variable_declaration, declaration_map, expressions)));
+         return new ast::Init_Decl(dynamic_cast<ast::Var_Decl *>(resolve_declaration(init_decl->variable_declaration, identifier_map, expressions, false)));
       } else if (init_exp) {
-         return new ast::Init_Exp(resolve_optional_exp(init_exp->expression, declaration_map, expressions));
+         return new ast::Init_Exp(resolve_optional_exp(init_exp->expression, identifier_map, expressions));
       }
       return nullptr;
    }
 
-   ast::Expression *resolve_optional_exp(ast::Expression *exp, std::unordered_map<std::string, std::pair<std::string, bool>> &declaration_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
+   ast::Expression *resolve_optional_exp(ast::Expression *exp, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
       if (exp) {
-         return resolve_exp(exp, declaration_map, expressions);
+         return resolve_exp(exp, identifier_map, expressions);
       }
       return nullptr;
    }
@@ -801,7 +849,7 @@ namespace parser
          if(!current_label) {
             throw std::runtime_error("Break statement outside of loop.");
          }
-         ast::Identifier *copy = make_label(current_label->name);
+         ast::Identifier *copy = make_label(current_label->text);
          return annotate(break_statement, copy); 
       }
       ast::Continue *continue_statement = dynamic_cast<ast::Continue *>(statement);
@@ -809,7 +857,7 @@ namespace parser
          if(!current_label) {
             throw std::runtime_error("Continue statement outside of loop.");
          }
-         ast::Identifier *copy = make_label(current_label->name);
+         ast::Identifier *copy = make_label(current_label->text);
          return annotate(continue_statement, copy); 
       }
       ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(statement);
@@ -860,6 +908,179 @@ namespace parser
       return block;
    }
 
+   void typecheck_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+      if(var_decl->name->text != "void") {
+         symbols.emplace(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), true)); // will not overwrite if already exists
+      }
+      if(var_decl->init) {
+         typecheck_exp(var_decl->init, symbols);
+      }
+   }
+
+   void typecheck_function_declaration(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+      std::unique_ptr<ast::Fun_Type> fun_type = std::make_unique<ast::Fun_Type>(fun_decl->params.size());
+      ast::Block *body = fun_decl->body;
+      bool already_defined = false;
+
+      if(symbols.count(fun_decl->name->text)) {
+         std::pair<std::unique_ptr<ast::Type>, bool> &old_decl = symbols[fun_decl->name->text];
+         ast::Fun_Type *old_fun_type = dynamic_cast<ast::Fun_Type *>(old_decl.first.get());
+         if(!old_fun_type || old_fun_type->param_count != fun_type->param_count) {
+            throw std::runtime_error("Incompatible function declarations.");
+         }
+         already_defined = old_decl.second;
+         if(already_defined && body) {
+            throw std::runtime_error("Function is defined more than once.");
+         } 
+      }
+
+      symbols.insert_or_assign(fun_decl->name->text, std::make_pair(std::move(fun_type), already_defined || (body != nullptr)));
+      if (body) {
+         for(auto &param : fun_decl->params) {
+            symbols.emplace(param->text, std::make_pair(std::make_unique<ast::Int>(), false));
+         }
+         typecheck_block(body, symbols);
+      }
+   }
+
+   // add type checking for statements later
+   void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+      for(auto &item : block->block_items) {
+         ast::D *d = dynamic_cast<ast::D *>(item.get());
+         if(d) {
+            if(dynamic_cast<ast::Var_Decl *>(d->declaration)) {
+               typecheck_variable_declaration(dynamic_cast<ast::Var_Decl *>(d->declaration), symbols);
+            }
+            else if(dynamic_cast<ast::Fun_Decl *>(d->declaration)) {
+               typecheck_function_declaration(dynamic_cast<ast::Fun_Decl *>(d->declaration), symbols);
+            }
+         }
+         ast::S *s = dynamic_cast<ast::S *>(item.get());
+         if(s) {
+            typecheck_statement(s->statement, symbols);
+         }
+      }
+   }
+
+   // add type checking for every other expression type later
+   void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+      ast::Function_Call *function_call = dynamic_cast<ast::Function_Call *>(e);
+      if(function_call) {
+         auto it = symbols.find(function_call->identifier->text);
+         if(it == symbols.end()) {
+            throw std::runtime_error(std::format("Function {} not defined or declared in scope.", function_call->identifier->text));
+         }
+         ast::Fun_Type *f_type = dynamic_cast<ast::Fun_Type *>(it->second.first.get());
+         if(!f_type) {
+            throw std::runtime_error(std::format("Variable {} used as function name.", function_call->identifier->text));
+         }
+         if(f_type->param_count != function_call->args.size()) {
+            throw std::runtime_error(std::format("Function {} takes {} arguments, but {} were provided.", function_call->identifier->text, f_type->param_count, function_call->args.size()));
+         }
+         for(auto &arg: function_call->args) {
+            typecheck_exp(arg, symbols);
+         }
+         return;
+      }
+      ast::Var *var = dynamic_cast<ast::Var *>(e);
+      if(var) {
+         std::pair<std::unique_ptr<ast::Type>, bool> &var_type = symbols[var->identifier->text];
+         ast::Int *int_type = dynamic_cast<ast::Int *>(var_type.first.get());
+         if(!int_type) {
+            throw std::runtime_error(std::format("Function name {} used as variable.", var->identifier->text));
+         }
+         return;
+      }
+      ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
+      if(assignment) {
+         typecheck_exp(assignment->lvalue, symbols);
+         typecheck_exp(assignment->exp, symbols);
+         return;
+      }
+      ast::Binary *binary = dynamic_cast<ast::Binary *>(e);
+      if(binary) {
+         typecheck_exp(binary->left, symbols);
+         typecheck_exp(binary->right, symbols);
+         return;
+      }
+      ast::Compound *compound = dynamic_cast<ast::Compound *>(e);
+      if(compound) {
+         typecheck_exp(compound->left, symbols);
+         typecheck_exp(compound->right, symbols);
+         return;
+      }
+      ast::Conditional *conditional = dynamic_cast<ast::Conditional *>(e);
+      if(conditional) {
+         typecheck_exp(conditional->condition, symbols);
+         typecheck_exp(conditional->left, symbols);
+         typecheck_exp(conditional->right, symbols);
+         return;
+      }
+      ast::Unary *unary = dynamic_cast<ast::Unary *>(e);
+      if(unary) {
+         typecheck_exp(unary->exp, symbols);
+         return;
+      }
+   }
+   
+   void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+      ast::Expression_Statement *expression_statement = dynamic_cast<ast::Expression_Statement *>(statement);
+      if(expression_statement) {
+         typecheck_exp(expression_statement->exp, symbols);
+         return;
+      }
+      ast::Return *return_statement = dynamic_cast<ast::Return *>(statement);
+      if(return_statement) {
+         typecheck_exp(return_statement->exp, symbols);
+         return;
+      }
+      ast::If *if_statement = dynamic_cast<ast::If *>(statement);
+      if(if_statement) {
+         typecheck_exp(if_statement->condition, symbols);
+         typecheck_statement(if_statement->then_statement, symbols);
+         if(if_statement->else_statement) {
+            typecheck_statement(if_statement->else_statement, symbols);
+         }
+         return;
+      }
+      ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(statement);
+      if(compound_statement) {
+         typecheck_block(compound_statement->block, symbols);
+         return;
+      }
+      ast::For *for_statement = dynamic_cast<ast::For *>(statement);
+      if(for_statement) {
+         ast::Init_Decl *init_decl = dynamic_cast<ast::Init_Decl *>(for_statement->init);
+         if(init_decl) {
+            typecheck_variable_declaration(dynamic_cast<ast::Var_Decl *>(init_decl->variable_declaration), symbols);
+         }
+         ast::Init_Exp *init_exp = dynamic_cast<ast::Init_Exp *>(for_statement->init);
+         if(init_exp && init_exp->expression) {
+            typecheck_exp(init_exp->expression, symbols);
+         }
+         if(for_statement->condition) {
+            typecheck_exp(for_statement->condition, symbols);
+         }
+         if(for_statement->post) {
+            typecheck_exp(for_statement->post, symbols);
+         }
+         typecheck_statement(for_statement->body, symbols);
+         return;
+      }
+      ast::While *while_statement = dynamic_cast<ast::While *>(statement);
+      if(while_statement) {
+         typecheck_exp(while_statement->condition, symbols);
+         typecheck_statement(while_statement->body, symbols);
+         return;
+      }
+      ast::DoWhile *do_while_statement = dynamic_cast<ast::DoWhile *>(statement);
+      if(do_while_statement) {
+         typecheck_statement(do_while_statement->body, symbols);
+         typecheck_exp(do_while_statement->condition, symbols);
+         return;
+      }
+   }
+
    // This function is hardcoded and handles the entire main function
    std::vector<std::unique_ptr<ast::Fun_Decl>> parse_program(std::list<std::string> &tokens)
    {
@@ -895,30 +1116,36 @@ namespace parser
                }
             }
             expect(")", tokens);
+            std::vector<std::unique_ptr<ast::Expression>> expressions;
+            ast::Block *body = nullptr;
             if(tokens.front() == "{") // Function declaration with a definition
             {
-               expect("{", tokens);
-               std::vector<std::unique_ptr<ast::Expression>> expressions;
+               tokens.pop_front();
                std::vector<std::unique_ptr<ast::Block_Item>> function_body;
                while (tokens.front() != "}")
                {
                   std::unique_ptr<ast::Block_Item> next_block_item = parse_block_item(tokens, expressions);
                   function_body.push_back(std::move(next_block_item));
                }
-               ast::Block *body = new ast::Block(std::move(function_body));
-               ast::Block *resolved_body = resolve_block(body, declaration_map, expressions);
-               delete body;
-               body = label_block(resolved_body, nullptr);
                expect("}", tokens);
-               std::unique_ptr<ast::Fun_Decl> func = std::make_unique<ast::Fun_Decl>(func_name, std::move(params), std::move(expressions), body);
-               function_declarations.push_back(std::move(func));
+               body = new ast::Block(std::move(function_body));
             }
             else // Basic function declaration without a definition
             {
                expect(";", tokens);
-               std::unique_ptr<ast::Fun_Decl> func = std::make_unique<ast::Fun_Decl>(func_name, std::move(params));
-               function_declarations.push_back(std::move(func));
             }
+
+            ast::Fun_Decl *func = new ast::Fun_Decl(func_name, std::move(params), std::move(expressions), body);
+            ast::Fun_Decl *resolved_func = resolve_fun_decl(func, identifier_map, func->expressions, true);
+            delete func;
+
+            if(resolved_func->body) {
+               resolved_func->body = label_block(resolved_func->body, nullptr);
+            }
+
+            typecheck_function_declaration(resolved_func, symbols); // type checking after resolution
+
+            function_declarations.emplace_back(resolved_func);
          } else {
             throw std::runtime_error("Expected variable or function declaration.");
          }
@@ -928,8 +1155,9 @@ namespace parser
          throw std::runtime_error("Extra Characters Found For Minimal Compiler.");
       }
 
-      declaration_map.clear();
+      identifier_map.clear();
       symbol_table.clear();
+      symbols.clear();
       return function_declarations;
    }
 
