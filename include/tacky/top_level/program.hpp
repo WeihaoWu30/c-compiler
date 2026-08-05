@@ -1,12 +1,13 @@
 #pragma once
 #include "tacky/top_level/function.hpp"
+#include <vector>
+#include <memory>
 
 namespace tacky
 {
   struct Program
   {
-    Function *func;
-    Program(Function *function_definition) : func(function_definition) {}
-    ~Program() { delete func; }
+    std::vector<std::unique_ptr<Function>> function_definitions;
+    Program(std::vector<std::unique_ptr<Function>> function_definitions_) : function_definitions(std::move(function_definitions_)) {}
   };
 }

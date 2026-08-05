@@ -11,11 +11,13 @@ namespace tacky
   struct Function
   {
     Identifier *identifier;
+    std::vector<std::unique_ptr<Identifier>> params;
     std::vector<std::unique_ptr<Instruction>> body;
     std::vector<std::unique_ptr<Val>> values;
     Function(Identifier *identifer_,
+             std::vector<std::unique_ptr<Identifier>> params_,
              std::vector<std::unique_ptr<Instruction>> body_,
-             std::vector<std::unique_ptr<Val>> values_) : identifier(identifer_), body(std::move(body_)), values(std::move(values_)) {}
+             std::vector<std::unique_ptr<Val>> values_) : identifier(identifer_), params(std::move(params_)), body(std::move(body_)), values(std::move(values_)) {}
     ~Function()
     {
       delete identifier;

@@ -8,3 +8,4 @@
 #include "tacky/instructions/return.hpp"
 #include "tacky/instructions/unary.hpp"
 #include "tacky/instructions/compound.hpp"
+#include "tacky/instructions/fun_call.hpp"

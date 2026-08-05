@@ -6,7 +6,7 @@ namespace ast
 {
    struct Identifier
    {
-      std::string name;
-      Identifier(std::string name_) : name(name_) {}
+      std::string text;
+      Identifier(std::string text_) : text(text_) {}
    };
 }
