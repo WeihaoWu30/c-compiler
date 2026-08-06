@@ -12,9 +12,9 @@ namespace aast
     Idiv(Operand *operand_) : operand(operand_) {}
 
   protected:
-    void write(std::ostream &ostr) const override
+    void write(std::ostream &ostr) const override 
     {
-      ostr << "idivl" << "\t" << *operand << std::endl;
+      ostr << "idivl" << "\t" << *operand << "\n";
     }
   };
 }

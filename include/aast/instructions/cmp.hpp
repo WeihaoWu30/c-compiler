@@ -14,7 +14,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "cmpl\t" << *operand1 << ", " << *operand2 << std::endl;
+      ostr << "cmpl\t" << *operand1 << ", " << *operand2 << "\n";
     }
   };
 }

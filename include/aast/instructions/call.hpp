@@ -9,7 +9,8 @@ namespace aast
   {
     Identifier *identifier;
     Call(Identifier *identifier_) : identifier(identifier_) {}
+    ~Call() { delete identifier; }
     // add underscore for macos in front of identifier and remove the @PLT
-    void write(std::ostream &ostr) const override { ostr << "call\t" << *identifier << "@PLT" << std::endl; } 
+    void write(std::ostream &ostr) const override { ostr << "call\t" << *identifier << "@PLT\n"; } 
   };
 }

@@ -9,7 +9,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "cdq" << std::endl;
+      ostr << "cdq\n";
     }
   };
 }

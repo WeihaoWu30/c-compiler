@@ -9,6 +9,6 @@ namespace aast
   {
     Operand *operand;
     Push(Operand *operand_) : operand(operand_) {}
-    void write(std::ostream &ostr) const override { ostr << "pushq\t" << *operand << std::endl; }
+    void write(std::ostream &ostr) const override { ostr << "pushq\t" << *operand << "\n"; }
   };
 }

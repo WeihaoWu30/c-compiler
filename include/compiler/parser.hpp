@@ -12,9 +12,11 @@
 #include "ast/declarations/declarations.hpp"
 #include "ast/block/block.hpp"
 #include <memory>
+#include <regex>
 
 namespace parser
 {
+  static const std::regex naming_convention("^[a-zA-Z_][a-zA-Z0-9_]*$");
   constexpr std::array<std::string_view, 3> unary_operators = {"!", "~", "-"};
   constexpr std::array<std::string_view, 11> compound_operators = {"+=",
                                                                    "-=",
@@ -88,6 +90,7 @@ namespace parser
   void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
   void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
   void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
+  void parse_parameters(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Identifier>> &params, const std::string &func_name);
   std::vector<std::unique_ptr<ast::Fun_Decl>> parse_program(std::list<std::string> &tokens);
   ast::Program *parse(std::list<std::string> &tokens);
 }

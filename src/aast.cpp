@@ -8,7 +8,7 @@ namespace aast
   {
     for(auto &function_definition : program.function_definitions)
     {
-      ostr << *function_definition << std::endl;
+      ostr << *function_definition << "\n";
     }
     ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
     return ostr;
@@ -23,10 +23,10 @@ namespace aast
   std::ostream &operator<<(std::ostream &ostr, const Function &function)
   {
     // Add underscore before function name for macos
-    ostr << "\t" << ".globl " << *function.name << std::endl;
-    ostr << *function.name << ":" << std::endl;
-    ostr << "\t" << "pushq\t%rbp" << std::endl;
-    ostr << "\t" << "movq\t%rsp, %rbp" << std::endl;
+    ostr << "\t" << ".globl " << *function.name << "\n";
+    ostr << *function.name << ":\n";
+    ostr << "\t" << "pushq\t%rbp\n";
+    ostr << "\t" << "movq\t%rsp, %rbp\n";
 
     // Ret *return_instruction = nullptr; // final return instruction has to come after popping off the stack frame
     for (const std::unique_ptr<Instruction> &instr : function.instructions)
@@ -38,7 +38,7 @@ namespace aast
 
       if (dynamic_cast<Label *>(instr.get()))
       {
-        ostr << std::endl
+        ostr << "\n"
              << *instr;
       }
       else if (dynamic_cast<Ret *>(instr.get()))
