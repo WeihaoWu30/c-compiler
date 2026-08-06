@@ -14,7 +14,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "movl" << "\t" << *src << ", " << *dst << std::endl;
+      ostr << "movl" << "\t" << *src << ", " << *dst << "\n";
     }
   };
 }

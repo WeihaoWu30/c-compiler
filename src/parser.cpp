@@ -12,6 +12,7 @@
 #include <memory>
 #include <utility>
 #include <iterator>
+#include <regex>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
 
@@ -280,14 +281,20 @@ namespace parser
           !is_type(next_token))
       {
          ast::Identifier *name = new ast::Identifier(next_token);
-         if(*std::next(tokens.begin()) == "(") {
+         tokens.pop_front();
+         if(tokens.front() == "(") {
             tokens.pop_front();
             std::vector<ast::Expression *> arguemnt_list;
             while(!tokens.empty() && tokens.front() != ")") {
                ast::Expression *arguement = parse_expression(tokens, 0, expressions);
                arguemnt_list.push_back(std::move(arguement));
                if(tokens.front() == ")") break;
-               else expect(",", tokens);
+               else {
+                  expect(",", tokens);
+                  if(!tokens.empty() && tokens.front() == ")") {
+                     throw std::runtime_error(std::format("Trailing comma in argument list of function call {}.", name->text));
+                  }
+               }
             }
             expect(")", tokens);
             std::unique_ptr<ast::Function_Call> function_call = std::make_unique<ast::Function_Call>(name, arguemnt_list); // function call doesn't own expressions so copy by value is fine
@@ -295,7 +302,6 @@ namespace parser
          } else {
             std::unique_ptr<ast::Var> variable = std::make_unique<ast::Var>(name);
             expressions.push_back(std::move(variable));
-            tokens.pop_front();
          }
          return expressions.back().get();
       }
@@ -448,7 +454,7 @@ namespace parser
          throw std::runtime_error("Missing semicolon.");
       }
       std::string next_token(*std::next(tokens.begin()));
-      if (*endptr != '\0' && tokens.front() != "return")
+      if (*endptr != '\0' && tokens.front() != "return" && std::regex_match(tokens.front(), parser::naming_convention))
       {
          std::string name(tokens.front());
          // tokens.pop_front();
@@ -476,26 +482,7 @@ namespace parser
          tokens.pop_front();
          expect("(", tokens);
          std::vector<std::unique_ptr<ast::Identifier>> param_list;
-         while(!tokens.empty() && tokens.front() != ")")
-         {
-            if(is_type(tokens.front()))
-            {
-               tokens.pop_front();
-               param_list.push_back(std::make_unique<ast::Identifier>(tokens.front()));
-               tokens.pop_front();
-               if(tokens.front() == ")") break;
-               else expect(",", tokens);
-            } else if(tokens.front() == "void")
-            {
-               tokens.pop_front();
-               param_list.push_back(std::make_unique<ast::Identifier>("void"));
-            }
-            else
-            {
-               throw std::runtime_error("Expected valid type.");
-            }
-         }
-         expect(")", tokens);
+         parse_parameters(tokens, param_list, identifier->text);
          expect(";", tokens);
          declaration = new ast::Fun_Decl(identifier, std::move(param_list));
       }
@@ -670,6 +657,9 @@ namespace parser
    }
 
    ast::Var_Decl *resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions) {
+      if(!std::regex_match(var_decl->name->text, parser::naming_convention)) {
+         throw std::runtime_error(std::format("{} is not a valid name for a variable.", var_decl->name->text));
+      }
       if (identifier_map.count(var_decl->name->text) && identifier_map[var_decl->name->text].from_current_scope)
       {
          throw std::runtime_error(std::format("{} has already been declared.", var_decl->name->text));
@@ -686,15 +676,19 @@ namespace parser
    }
 
    ast::Fun_Decl *resolve_fun_decl(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, MapEntry> &identifier_map, std::vector<std::unique_ptr<ast::Expression>> &expressions, bool is_file_scope) {
-      if(identifier_map.count(fun_decl->name->text))
+      std::string function_name = fun_decl->name->text;
+      if(!std::regex_match(function_name, parser::naming_convention)) {
+         throw std::runtime_error(std::format("{} is not a valid name for a function.", function_name));
+      }
+      if(identifier_map.count(function_name))
       {
-         MapEntry& prev_entry = identifier_map[fun_decl->name->text];
+         MapEntry& prev_entry = identifier_map[function_name];
          if(prev_entry.from_current_scope && !prev_entry.has_linkage) {
-            throw std::runtime_error(std::format("The function {} has already been declared.", fun_decl->name->text));
+            throw std::runtime_error(std::format("The function {} has already been declared.", function_name));
          }
       }
 
-      identifier_map.insert_or_assign(fun_decl->name->text, MapEntry{ fun_decl->name->text, true, true });
+      identifier_map.insert_or_assign(function_name, MapEntry{ function_name, true, true });
 
       std::unordered_map<std::string, MapEntry> inner_map = copy_identifier_map(identifier_map);
       std::vector<std::unique_ptr<ast::Identifier>> new_params;
@@ -710,10 +704,13 @@ namespace parser
          new_body = resolve_block(fun_decl->body, inner_map, expressions, false);
       }
 
-      return new ast::Fun_Decl(new ast::Identifier(fun_decl->name->text), std::move(new_params), std::move(fun_decl->expressions), new_body);
+      return new ast::Fun_Decl(new ast::Identifier(function_name), std::move(new_params), std::move(fun_decl->expressions), new_body);
    }
 
    ast::Identifier *resolve_params(ast::Identifier *identifier, std::unordered_map<std::string, MapEntry> &identifier_map) {
+      if(!std::regex_match(identifier->text, parser::naming_convention)) {
+         throw std::runtime_error(std::format("{} is not a valid name for a parameter.", identifier->text));
+      }
       if (identifier_map.count(identifier->text) && identifier_map[identifier->text].from_current_scope)
       {
          throw std::runtime_error(std::format("The parameter {} has already been declared.", identifier->text));
@@ -1081,6 +1078,35 @@ namespace parser
       }
    }
 
+   void parse_parameters(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Identifier>> &params, const std::string &func_name) {
+      while(!tokens.empty() && tokens.front() != ")")
+      {
+         if(is_type(tokens.front()))
+         {
+            tokens.pop_front();
+            params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
+            tokens.pop_front();
+            if(tokens.front() == ")") break;
+            else {
+               expect(",", tokens);
+               if(!tokens.empty() && !is_type(tokens.front())) {
+                  throw std::runtime_error(std::format("Trailing comma in parameter list of function {}.", func_name));
+               }
+            }
+         } 
+         else if(tokens.front() == "void")
+         {
+            tokens.pop_front();
+            break;
+         }
+         else
+         {
+            throw std::runtime_error(std::format("{} should not be in the parameter list of function {}.", tokens.front(), func_name));
+         }
+      }
+      expect(")", tokens);
+   }
+
    // This function is hardcoded and handles the entire main function
    std::vector<std::unique_ptr<ast::Fun_Decl>> parse_program(std::list<std::string> &tokens)
    {
@@ -1095,27 +1121,7 @@ namespace parser
             tokens.pop_front();
             expect("(", tokens);
             std::vector<std::unique_ptr<ast::Identifier>> params;
-            while(!tokens.empty() && tokens.front() != ")")
-            {
-               if(is_type(tokens.front()))
-               {
-                  tokens.pop_front();
-                  params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
-                  tokens.pop_front();
-                  if(tokens.front() == ")") break;
-                  else expect(",", tokens);
-               } 
-               else if(tokens.front() == "void")
-               {
-                  params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
-                  tokens.pop_front();
-               }
-               else
-               {
-                  throw std::runtime_error("Expected valid function declaration.");
-               }
-            }
-            expect(")", tokens);
+            parse_parameters(tokens, params, func_name->text);
             std::vector<std::unique_ptr<ast::Expression>> expressions;
             ast::Block *body = nullptr;
             if(tokens.front() == "{") // Function declaration with a definition

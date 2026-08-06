@@ -14,9 +14,9 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "\tmovq\t%rbp, %rsp" << std::endl;
-      ostr << "\tpopq\t%rbp" << std::endl;
-      ostr << "\t" << name << std::endl;
+      ostr << "\tmovq\t%rbp, %rsp\n";
+      ostr << "\tpopq\t%rbp\n";
+      ostr << "\t" << name << "\n";
     }
   };
 }

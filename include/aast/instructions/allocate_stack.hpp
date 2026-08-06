@@ -13,7 +13,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "subq\t$" << bytes << ", %rsp" << std::endl;
+      ostr << "subq\t$" << bytes << ", %rsp\n";
     }
   };
 }

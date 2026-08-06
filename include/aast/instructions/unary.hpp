@@ -20,7 +20,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << *unary_operator << "\t" << *operand << std::endl;
+      ostr << *unary_operator << "\t" << *operand << "\n";
     }
   };
 }

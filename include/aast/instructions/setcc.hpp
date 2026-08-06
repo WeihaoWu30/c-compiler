@@ -22,7 +22,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << "set" << *cond_code << "\t" << *operand << std::endl;
+      ostr << "set" << *cond_code << "\t" << *operand << "\n";
     }
   };
 }
