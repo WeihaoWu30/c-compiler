@@ -13,11 +13,19 @@
 #include <vector>
 #include <memory>
 #include <array>
+#include <cstddef>
 
 namespace codegen
 {
-    extern std::unordered_map<std::string, int> stack_offset;
-    extern std::unordered_map<int, aast::Stack *> stack_objs;
+    struct StackManager;
+    constexpr std::array<aast::RegType, 6> argument_registers = {
+        aast::RegType::DI,
+        aast::RegType::SI,
+        aast::RegType::DX,
+        aast::RegType::CX,
+        aast::RegType::R8,
+        aast::RegType::R9,
+    };
     constexpr std::array<tacky::Binary_Operator, 8> basic_operators = {
         tacky::Binary_Operator::Add,
         tacky::Binary_Operator::Subtract,
@@ -42,9 +50,7 @@ namespace codegen
         tacky::Binary_Operator::GreaterThan,
         tacky::Binary_Operator::GreaterOrEqual,
     };
-
-    extern uint32_t total_bytes_to_reserve;
-
+    constexpr std::size_t MAX_PARAMS_IN_REGISTERS = 6;
     aast::Operand *generate_operand(tacky::Val *t_val, std::vector<std::unique_ptr<aast::Operand>> &operands);
     aast::Unary_Operator *generate_unary_operators(tacky::Unary_Operator unary_operator);
     aast::Binary_Operator *generate_basic_binary_operators(tacky::Binary_Operator binary_operator);
@@ -58,15 +64,17 @@ namespace codegen
     void generate_label(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions);
     void generate_copy(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
     void generate_instructions(tacky::Function *func, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    aast::Stack *replace_pseudo(aast::Pseudo *pseudo, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_shifting(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_basic(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_mult(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_div(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void compiler_pass(std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
+    aast::Stack *replace_pseudo(aast::Pseudo *pseudo, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_shifting(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_basic(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_mult(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_div(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
+    void copy_parameters(std::vector<std::unique_ptr<tacky::Identifier>> &params, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
+    void compiler_pass(StackManager &stack_manager, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
+    aast::Function *generate_function(tacky::Function *func);
     aast::Program *generate_top_level(tacky::Program *tacky_program);
 }

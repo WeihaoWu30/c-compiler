@@ -6,7 +6,11 @@ namespace aast
 {
   std::ostream &operator<<(std::ostream &ostr, const Program &program)
   {
-    ostr << *(program.function_definition) << std::endl;
+    for(auto &function_definition : program.function_definitions)
+    {
+      ostr << *function_definition << std::endl;
+    }
+    ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
     return ostr;
   }
 

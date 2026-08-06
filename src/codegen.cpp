@@ -8,12 +8,15 @@
 #include <memory>
 #include <utility>
 #include <algorithm>
+#include <cstddef>
 
 namespace codegen
 {
-  std::unordered_map<std::string, int> stack_offset; // unique rbp jumps
-  std::unordered_map<int, aast::Stack *> stack_objs;
-  uint32_t total_bytes_to_reserve = 0; // total bytes to allocate to aast::Stack Frame
+  struct StackManager {
+    std::unordered_map<std::string, int> stack_offset{}; // unique rbp jumps
+    std::unordered_map<int, aast::Stack *> stack_objs{}; // copyable stack objects
+    uint32_t total_bytes_to_reserve = 0; // total bytes to allocate to aast::Stack Frame
+  };
 
   // This function converts Tacky Values to Immediate Values and Temporary Variables
   aast::Operand *generate_operand(tacky::Val *t_val, std::vector<std::unique_ptr<aast::Operand>> &operands)
@@ -354,10 +357,69 @@ namespace codegen
     assembly_instructions.push_back(std::move(mov));
   }
 
-  // This function converts every tacky Instruction to a set of assembly instructions
-  void generate_instructions(tacky::Function *func, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  // This function converts a TACKY function call to a Call instruction
+  void generate_call(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
   {
-    for (std::unique_ptr<tacky::Instruction> &instruction : func->body)
+    tacky::Fun_Call *fun_call = dynamic_cast<tacky::Fun_Call *>(instruction);
+    if (!fun_call)
+      return;
+
+    std::size_t argument_count = fun_call->args.size();
+    std::size_t register_arguments_count = std::min(MAX_PARAMS_IN_REGISTERS, argument_count);
+    std::size_t stack_arguments_count = argument_count > MAX_PARAMS_IN_REGISTERS ? argument_count - MAX_PARAMS_IN_REGISTERS : 0;
+    int stack_padding = 0;
+    if(stack_arguments_count % 2)
+    {
+      stack_padding = 8;
+    }
+
+    if(stack_padding != 0) {
+      assembly_instructions.push_back(std::make_unique<aast::AllocateStack>(stack_padding));
+    }
+
+    for(std::size_t i{};i < register_arguments_count;++i) {
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(argument_registers[i], aast::Size::DWORD);
+      aast::Operand *assembly_arg = generate_operand(fun_call->args[i], operands);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(assembly_arg, reg.get());
+      assembly_instructions.push_back(std::move(mov));
+      operands.push_back(std::move(reg));
+    }
+
+    std::unique_ptr<aast::Reg> ax_reg = std::make_unique<aast::Reg>(aast::RegType::AX, aast::Size::QWORD);
+    for(std::size_t i = 1;i <= stack_arguments_count;++i) {
+      aast::Operand *assembly_arg = generate_operand(fun_call->args[argument_count - i], operands);
+      aast::Imm *imm = dynamic_cast<aast::Imm *>(assembly_arg);
+      if(imm) {
+        std::unique_ptr<aast::Push> push = std::make_unique<aast::Push>(assembly_arg);
+        assembly_instructions.push_back(std::move(push));
+      }
+      else {
+        std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(assembly_arg, ax_reg.get());
+        assembly_instructions.push_back(std::move(mov));
+        std::unique_ptr<aast::Push> push = std::make_unique<aast::Push>(ax_reg.get());
+        assembly_instructions.push_back(std::move(push));
+      }
+    }
+
+    aast::Identifier *identifier = new aast::Identifier(fun_call->fun_name->name);
+    std::unique_ptr<aast::Call> call = std::make_unique<aast::Call>(identifier);
+    assembly_instructions.push_back(std::move(call));
+
+    int bytes_to_remove = 8 * stack_arguments_count + stack_padding;
+    if(bytes_to_remove != 0) {
+      assembly_instructions.push_back(std::make_unique<aast::DeallocateStack>(bytes_to_remove));
+    }
+
+    aast::Operand *assembly_dst = generate_operand(fun_call->dst, operands);
+    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(ax_reg.get(), assembly_dst);
+    assembly_instructions.push_back(std::move(mov));
+    operands.push_back(std::move(ax_reg));
+  }
+
+  // This function converts every tacky Instruction to a set of assembly instructions
+  void generate_instructions(std::vector<std::unique_ptr<tacky::Instruction>> &body, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  {
+    for (std::unique_ptr<tacky::Instruction> &instruction : body)
     {
       generate_jmp_if(instruction.get(), instructions, operands);
       generate_return(instruction.get(), instructions, operands);
@@ -367,26 +429,36 @@ namespace codegen
       generate_jmp(instruction.get(), instructions);
       generate_label(instruction.get(), instructions);
       generate_copy(instruction.get(), instructions, operands);
+      generate_call(instruction.get(), instructions, operands);
     }
   }
 
   // This function converts the temporary variable to a offset from the base caller address within the stack frame
-  aast::Stack *replace_pseudo(aast::Pseudo *pseudo, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  aast::Stack *replace_pseudo(
+    aast::Pseudo *pseudo, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     std::string var(pseudo->identifier->name);
-    if (!stack_offset.count(var))
+    if (!stack_manager.stack_offset.count(var))
     { // Only add New Locations Crreated
-      total_bytes_to_reserve += 4;
-      stack_offset[var] = -total_bytes_to_reserve;
-      std::unique_ptr<aast::Stack> stack = std::make_unique<aast::Stack>(stack_offset[var]);
-      stack_objs.insert({stack_offset[var], stack.get()});
+      stack_manager.total_bytes_to_reserve += 4;
+      stack_manager.stack_offset[var] = stack_manager.total_bytes_to_reserve;
+      std::unique_ptr<aast::Stack> stack = std::make_unique<aast::Stack>(stack_manager.stack_offset[var]);
+      stack_manager.stack_objs.insert({stack_manager.stack_offset[var], stack.get()});
       operands.push_back(std::move(stack));
     }
-    return stack_objs[stack_offset[var]];
+    return stack_manager.stack_objs[stack_manager.stack_offset[var]];
   }
 
   // This function assists in replacing pseudo variables for mov
-  void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_mov(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Mov *mov = dynamic_cast<aast::Mov *>(it->get());
     if (!mov)
@@ -396,8 +468,8 @@ namespace codegen
     aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
     if (src && dst)
     { // separate into 2 instructions using r10d register
-      src_stack = replace_pseudo(src, operands);
-      dst_stack = replace_pseudo(dst, operands);
+      src_stack = replace_pseudo(src, operands, stack_manager);
+      dst_stack = replace_pseudo(dst, operands, stack_manager);
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(src_stack, reg.get()); // copies src to register
@@ -409,18 +481,22 @@ namespace codegen
     }
     else if (src)
     {
-      src_stack = replace_pseudo(src, operands);
+      src_stack = replace_pseudo(src, operands, stack_manager);
       mov->src = src_stack;
     }
     else if (dst)
     {
-      dst_stack = replace_pseudo(dst, operands);
+      dst_stack = replace_pseudo(dst, operands, stack_manager);
       mov->dst = dst_stack;
     }
   }
 
   // This function assists in replacing pseudo variables for unary operators
-  void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_unary(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Unary *unary = dynamic_cast<aast::Unary *>(it->get());
     if (!unary)
@@ -428,12 +504,17 @@ namespace codegen
     aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(unary->operand);
     if (operand)
     {
-      aast::Stack *stack = replace_pseudo(operand, operands);
+      aast::Stack *stack = replace_pseudo(operand, operands, stack_manager);
       unary->operand = stack;
     }
   }
 
-  void fix_shifting(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_shifting(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
@@ -447,7 +528,7 @@ namespace codegen
     aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
     if (operand1)
     {
-      aast::Stack *src_stack = replace_pseudo(operand1, operands);
+      aast::Stack *src_stack = replace_pseudo(operand1, operands, stack_manager);
       std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::DWORD);
       std::unique_ptr<aast::Reg> reg2 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::BYTE);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg1.get());
@@ -459,7 +540,7 @@ namespace codegen
     }
     if (operand2)
     {
-      aast::Stack *dst_stack = replace_pseudo(operand2, operands);
+      aast::Stack *dst_stack = replace_pseudo(operand2, operands, stack_manager);
       binary->operand2 = dst_stack;
     }
 
@@ -478,7 +559,12 @@ namespace codegen
   }
 
   // This function assists in replacing pseudo variables for basic operators
-  void fix_basic(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_basic(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
@@ -491,8 +577,8 @@ namespace codegen
     aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
     if (operand1 && operand2)
     { // same as mov with 2 addresses
-      src_stack = replace_pseudo(operand1, operands);
-      dst_stack = replace_pseudo(operand2, operands);
+      src_stack = replace_pseudo(operand1, operands, stack_manager);
+      dst_stack = replace_pseudo(operand2, operands, stack_manager);
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
@@ -504,12 +590,12 @@ namespace codegen
     }
     else if (operand1)
     {
-      src_stack = replace_pseudo(operand1, operands);
+      src_stack = replace_pseudo(operand1, operands, stack_manager);
       binary->operand1 = src_stack;
     }
     else if (operand2)
     {
-      dst_stack = replace_pseudo(operand2, operands);
+      dst_stack = replace_pseudo(operand2, operands, stack_manager);
       binary->operand2 = dst_stack;
     }
 
@@ -527,7 +613,12 @@ namespace codegen
   }
 
   // This function assists in replacing pseudo variables for multiplication operator
-  void fix_mult(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_mult(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Binary *binary = dynamic_cast<aast::Binary *>(it->get());
     if (!binary)
@@ -539,12 +630,12 @@ namespace codegen
     aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2);
     if (src)
     {
-      aast::Stack *src_stack = replace_pseudo(src, operands);
+      aast::Stack *src_stack = replace_pseudo(src, operands, stack_manager);
       binary->operand1 = src_stack;
     }
     if (dst)
     {
-      aast::Stack *dst_stack = replace_pseudo(dst, operands);
+      aast::Stack *dst_stack = replace_pseudo(dst, operands, stack_manager);
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
       std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst_stack, reg.get()); // copies address content into register
@@ -560,7 +651,12 @@ namespace codegen
   }
 
   // This function assists in replacing pseudo variables for division and modulo operator
-  void fix_div(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_div(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(it->get());
     if (!idiv)
@@ -569,7 +665,7 @@ namespace codegen
     aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand);
     if (pseudo)
     {
-      aast::Stack *stack = replace_pseudo(pseudo, operands);
+      aast::Stack *stack = replace_pseudo(pseudo, operands, stack_manager);
       idiv->operand = stack;
     }
     else if (imm_val)
@@ -584,7 +680,12 @@ namespace codegen
   }
 
   // This function assists in replacing pseudos for cmp as well as rearranging its operands
-  void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_cmp(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::Cmp *cmp = dynamic_cast<aast::Cmp *>(it->get());
     if (!cmp)
@@ -595,8 +696,8 @@ namespace codegen
                 *dst_stack = nullptr;
     if (operand1 && operand2)
     {
-      src_stack = replace_pseudo(operand1, operands);
-      dst_stack = replace_pseudo(operand2, operands);
+      src_stack = replace_pseudo(operand1, operands, stack_manager);
+      dst_stack = replace_pseudo(operand2, operands, stack_manager);
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       cmp->operand1 = reg.get();
@@ -609,12 +710,12 @@ namespace codegen
     }
     else if (operand1)
     {
-      src_stack = replace_pseudo(operand1, operands);
+      src_stack = replace_pseudo(operand1, operands, stack_manager);
       cmp->operand1 = src_stack;
     }
     else if (operand2)
     {
-      dst_stack = replace_pseudo(operand2, operands);
+      dst_stack = replace_pseudo(operand2, operands, stack_manager);
       cmp->operand2 = dst_stack;
     }
 
@@ -635,7 +736,11 @@ namespace codegen
   }
 
   // This function handles setcc instructions with registers
-  void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void fix_set(
+    typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands,
+    StackManager &stack_manager
+  )
   {
     aast::SetCC *setcc = dynamic_cast<aast::SetCC *>(it->get());
     if (!setcc)
@@ -643,41 +748,93 @@ namespace codegen
     aast::Pseudo *operand = dynamic_cast<aast::Pseudo *>(setcc->operand);
     if (operand)
     {
-      aast::Stack *stack = replace_pseudo(operand, operands);
+      aast::Stack *stack = replace_pseudo(operand, operands, stack_manager);
       setcc->operand = stack;
     }
   }
 
   // This function converts every temporary Variable (Pseudo) to a stack offset
-  void compiler_pass(std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands)
+  void compiler_pass(
+    StackManager &stack_manager, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands
+  )
   {
     // aast::ll of the replacements follow the same steps: create aast::Stack struct, delete aast::Pseudo, replace with aast::Stack struct
     for (typename std::list<std::unique_ptr<aast::Instruction>>::iterator it = instructions.begin(); it != instructions.end(); ++it)
     {
-      fix_mov(it, instructions, operands);
-      fix_unary(it, operands);
-      fix_shifting(it, instructions, operands);
-      fix_cmp(it, instructions, operands);
-      fix_set(it, operands);
-      fix_mult(it, instructions, operands);
-      fix_basic(it, instructions, operands);
-      fix_div(it, instructions, operands);
+      fix_mov(it, instructions, operands, stack_manager);
+      fix_unary(it, operands, stack_manager);
+      fix_shifting(it, instructions, operands, stack_manager);
+      fix_cmp(it, instructions, operands, stack_manager);
+      fix_set(it, operands, stack_manager);
+      fix_mult(it, instructions, operands, stack_manager);
+      fix_basic(it, instructions, operands, stack_manager);
+      fix_div(it, instructions, operands, stack_manager);
     }
 
-    std::unique_ptr<aast::AllocateStack> allocateStack = std::make_unique<aast::AllocateStack>(total_bytes_to_reserve); // Reserves memory in stack frame for local variables
+    int stack_size = static_cast<int>((stack_manager.total_bytes_to_reserve + 15) & ~std::size_t(15));// rounds to the nearest multiple of 16
+    std::unique_ptr<aast::AllocateStack> allocateStack = std::make_unique<aast::AllocateStack>(stack_size); // Reserves memory in stack frame for local variables
     instructions.push_front(std::move(allocateStack));
+  }
+
+  void copy_parameters(
+    std::vector<std::unique_ptr<tacky::Identifier>> &params, 
+    std::list<std::unique_ptr<aast::Instruction>> &instructions, 
+    std::vector<std::unique_ptr<aast::Operand>> &operands
+  )
+  {
+    std::size_t n = params.size();
+    for(std::size_t i = 0;i < std::min(MAX_PARAMS_IN_REGISTERS, n);++i) {
+      aast::Identifier *param_name = new aast::Identifier(params[i]->name);
+      std::unique_ptr<aast::Pseudo> dst = std::make_unique<aast::Pseudo>(param_name);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(argument_registers[i], aast::Size::DWORD);;
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(reg.get(), dst.get());
+      instructions.push_back(std::move(mov));
+      operands.push_back(std::move(reg));
+      operands.push_back(std::move(dst));
+    }
+
+    for(std::size_t i = MAX_PARAMS_IN_REGISTERS; i < n; ++i) {
+      int stack_arguement_offset = 16 + 8 * static_cast<int>(i - MAX_PARAMS_IN_REGISTERS);
+      aast::Identifier *param_name = new aast::Identifier(params[i]->name);
+      std::unique_ptr<aast::Pseudo> pseudo = std::make_unique<aast::Pseudo>(param_name);
+      std::unique_ptr<aast::Stack> stack = std::make_unique<aast::Stack>(stack_arguement_offset);
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(stack.get(), pseudo.get());
+      instructions.push_back(std::move(mov));
+      operands.push_back(std::move(stack));
+      operands.push_back(std::move(pseudo));
+    }
+  }
+
+  aast::Function *generate_function(tacky::Function *func)
+  {
+    aast::Identifier *identifier = new aast::Identifier(func->identifier->name);
+    std::vector<std::unique_ptr<aast::Operand>> operands;
+    std::list<std::unique_ptr<aast::Instruction>> instructions;
+
+    // parameters
+    copy_parameters(func->params, instructions, operands);
+
+    // body
+    generate_instructions(func->body, instructions, operands);
+
+    // replace pseudoregisters
+    StackManager stack_manager;
+    compiler_pass(stack_manager, instructions, operands); // Convert after We allocate all needed temporary Variables
+
+    return new aast::Function(identifier, std::move(instructions), std::move(operands));
   }
 
   // This function converts Tacky nodes to assembly instructions
   aast::Program *generate_top_level(tacky::Program *tacky_program)
   {
-    aast::Identifier *identifier = new aast::Identifier(tacky_program->func->identifier->name);
-    std::vector<std::unique_ptr<aast::Operand>> operands;
-    std::list<std::unique_ptr<aast::Instruction>> instructions;
-    generate_instructions(tacky_program->func, instructions, operands);
-    compiler_pass(instructions, operands); // Convert aast::fter We aast::llocate aast::ll Needed tacky::emporary Variables
-    aast::Function *function = new aast::Function(identifier, std::move(instructions), std::move(operands));
-    aast::Program *program = new aast::Program(function);
+    std::vector<std::unique_ptr<aast::Function>> function_definitions;
+    for(auto &func : tacky_program->function_definitions)
+    {
+      function_definitions.emplace_back(generate_function(func.get()));
+    }
+    aast::Program *program = new aast::Program(std::move(function_definitions));
     return program;
   }
 }

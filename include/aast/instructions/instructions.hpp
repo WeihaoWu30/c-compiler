@@ -11,3 +11,6 @@
 #include "aast/instructions/jmpcc.hpp"
 #include "aast/instructions/label.hpp"
 #include "aast/instructions/setcc.hpp"
+#include "aast/instructions/call.hpp"
+#include "aast/instructions/deallocate_stack.hpp"
+#include "aast/instructions/push.hpp"

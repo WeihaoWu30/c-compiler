@@ -13,7 +13,7 @@ namespace aast
   protected:
     void write(std::ostream &ostr) const override
     {
-      ostr << offset << "(%rbp)";
+      ostr << "-" << offset << "(%rbp)";
     }
   };
 }
