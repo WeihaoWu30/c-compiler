@@ -9,3 +9,4 @@
 #include "ast/for_inits/for_inits.hpp"
 #include "ast/declarations/declarations.hpp"
 #include "ast/types/types.hpp"
+#include "ast/storage_class/storage_classes.hpp"
