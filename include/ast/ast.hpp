@@ -10,3 +10,5 @@
 #include "ast/declarations/declarations.hpp"
 #include "ast/types/types.hpp"
 #include "ast/storage_class/storage_classes.hpp"
+#include "ast/identifier_attrs/identifier_attr.hpp"
+#include "ast/initial_values/initial_value.hpp"

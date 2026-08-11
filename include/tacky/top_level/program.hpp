@@ -1,13 +1,16 @@
 #pragma once
 #include "tacky/top_level/function.hpp"
+#include "tacky/top_level/static_variable.hpp"
 #include <vector>
 #include <memory>
+#include <variant>
 
 namespace tacky
 {
+  using Top_Level = std::variant<Function, Static_Variable>;
   struct Program
   {
-    std::vector<std::unique_ptr<Function>> function_definitions;
-    Program(std::vector<std::unique_ptr<Function>> function_definitions_) : function_definitions(std::move(function_definitions_)) {}
+    std::vector<Top_Level> top_levels;
+    Program(std::vector<Top_Level> top_levels_) : top_levels(std::move(top_levels_)) {}
   };
 }

@@ -1,7 +1,7 @@
-#include "ast/abstract/declaration.hpp"
 #include "ast/ast.hpp"
-#include "ast/declarations/var_decl.hpp"
+#include "ast/identifier_attrs/identifier_attr.hpp"
 #include "compiler/parser.hpp"
+#include "compiler/symbols.hpp"
 #include <stdexcept>
 #include <format>
 #include <iostream>
@@ -14,6 +14,7 @@
 #include <utility>
 #include <iterator>
 #include <regex>
+#include <variant>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
 
@@ -22,7 +23,7 @@ namespace parser
    // For Parsing Expressions
    std::unordered_map<std::string, MapEntry> identifier_map; // formerly known as variable_map
    std::unordered_map<std::string, std::string> type_aliases; // maps types to typedef aliases
-   std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> symbols; // maps variable names to types
+   std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
    uint32_t var_counter = 0;
 
    // This Function Matches A Token Against Legal Syntax
@@ -638,27 +639,41 @@ namespace parser
       ast::Var_Decl *var_decl = dynamic_cast<ast::Var_Decl *>(declaration);
       ast::Fun_Decl *fun_decl = dynamic_cast<ast::Fun_Decl *>(declaration);
       if(var_decl) {
-         resolve_var_decl(var_decl, identifier_map);
+         resolve_var_decl(var_decl, identifier_map, is_file_scope);
       }
       if(fun_decl) {
          resolve_fun_decl(fun_decl, identifier_map, is_file_scope);
       }
    }
 
-   void resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map) {
+   void resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map, bool is_file_scope) {
       if(!std::regex_match(var_decl->name->text, parser::naming_convention)) {
          throw std::runtime_error(std::format("{} is not a valid name for a variable.", var_decl->name->text));
       }
-      if (identifier_map.count(var_decl->name->text) && identifier_map[var_decl->name->text].from_current_scope)
-      {
-         throw std::runtime_error(std::format("{} has already been declared.", var_decl->name->text));
-      }
-      std::string unique_name = make_temporary(var_decl->name->text);
-      identifier_map.insert_or_assign(var_decl->name->text, MapEntry{ unique_name, true, false });
-      var_decl->name->text = unique_name;
-      if (var_decl->init)
-      {
-         resolve_exp(var_decl->init, identifier_map);
+      std::string variable_name = var_decl->name->text;
+      if(!is_file_scope) {
+         if(auto it = identifier_map.find(variable_name); it != identifier_map.end()) {
+            MapEntry& prev_entry = it->second;
+            if(prev_entry.from_current_scope) {
+               if(!(prev_entry.has_linkage && var_decl->storage_class == ast::Storage_Class::EXTERN)) {
+                  throw std::runtime_error(std::format("{} has already been declared in this scope.", variable_name));
+               }
+            }
+         }
+
+         if(var_decl->storage_class == ast::Storage_Class::EXTERN) {
+            identifier_map.insert_or_assign(variable_name, MapEntry{ variable_name, true, true });
+         } else {
+            std::string unique_name = make_temporary(variable_name);
+            identifier_map.insert_or_assign(variable_name, MapEntry{ unique_name, true, false });
+            var_decl->name->text = unique_name;
+            if (var_decl->init)
+            {
+               resolve_exp(var_decl->init, identifier_map);
+            }
+         }
+      } else {
+         identifier_map.insert_or_assign(variable_name, MapEntry{ variable_name, true, is_file_scope });
       }
    }
 
@@ -667,9 +682,12 @@ namespace parser
       if(!std::regex_match(function_name, parser::naming_convention)) {
          throw std::runtime_error(std::format("{} is not a valid name for a function.", function_name));
       }
-      if(identifier_map.count(function_name))
+      if(!is_file_scope && fun_decl->storage_class == ast::Storage_Class::STATIC) {
+         throw std::runtime_error("Static functions are not supported in this scope.");
+      }
+      if(auto it = identifier_map.find(function_name); it != identifier_map.end())
       {
-         MapEntry& prev_entry = identifier_map[function_name];
+         MapEntry& prev_entry = it->second;
          if(prev_entry.from_current_scope && !prev_entry.has_linkage) {
             throw std::runtime_error(std::format("The function {} has already been declared.", function_name));
          }
@@ -894,11 +912,15 @@ namespace parser
       return block;
    }
 
-   void typecheck_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+   void typecheck_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope) {
       ast::Var_Decl *var_decl = dynamic_cast<ast::Var_Decl *>(declaration);
       ast::Fun_Decl *fun_decl = dynamic_cast<ast::Fun_Decl *>(declaration);
       if(var_decl) {
-         typecheck_variable_declaration(var_decl, symbols);
+         if(is_file_scope) {
+            typecheck_file_scope_variable_declaration(var_decl, symbols);
+         } else {
+            typecheck_local_variable_declaration(var_decl, symbols);
+         }
       }
       else if(fun_decl) {
          typecheck_function_declaration(fun_decl, symbols);
@@ -908,48 +930,138 @@ namespace parser
       }
    }
 
-   void typecheck_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
-      if(var_decl->name->text != "void") {
-         symbols.emplace(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), true)); // will not overwrite if already exists
+   void typecheck_file_scope_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols) {
+      ast::Constant *constant = dynamic_cast<ast::Constant *>(var_decl->init);
+      ast::Initial_Value initial_value;
+      if(constant) {
+         initial_value = ast::Initial(constant->val);
+      } else if(!var_decl->init) {
+         if(var_decl->storage_class == ast::Storage_Class::EXTERN) {
+            initial_value = ast::No_Initializer();
+         } else {
+            initial_value = ast::Tentative();
+         }
+      } else {
+         throw std::runtime_error(std::format("Variable declaration {} has a non-constant initializer.", var_decl->name->text));
       }
-      if(var_decl->init) {
-         typecheck_exp(var_decl->init, symbols);
+
+      bool global = var_decl->storage_class != ast::Storage_Class::STATIC;
+
+      if(auto it = symbols.find(var_decl->name->text); it != symbols.end()) {
+         std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr> &old_decl = it->second;
+         ast::Int *old_int_type = dynamic_cast<ast::Int *>(old_decl.first.get());
+         if(!old_int_type) {
+            throw std::runtime_error(std::format("Function {} is being redeclared as a variable.", var_decl->name->text));
+         }
+         if(!std::holds_alternative<ast::Static_Attr>(old_decl.second)) {
+            throw std::runtime_error(std::format("Variable {} is declared as local in file scope.", var_decl->name->text));
+         }
+         ast::Static_Attr old_decl_attr = std::get<ast::Static_Attr>(old_decl.second);
+         if(var_decl->storage_class == ast::Storage_Class::EXTERN) {
+            global = old_decl_attr.global;
+         } else if(old_decl_attr.global != global) {
+            throw std::runtime_error(std::format("Variable {} has conflicting variable linkage.", var_decl->name->text));
+         }
+         if(std::holds_alternative<ast::Initial>(old_decl_attr.init)) {
+            if(std::holds_alternative<ast::Initial>(initial_value)) {
+               throw std::runtime_error(std::format("Variable {} has conflicting file scope variable definitions.", var_decl->name->text));
+            } else {
+               initial_value = old_decl_attr.init;
+            }
+         } else if(!std::holds_alternative<ast::Initial>(initial_value) && std::holds_alternative<ast::Tentative>(old_decl_attr.init)) {
+            initial_value = ast::Tentative();
+         }
+      }
+
+      ast::Identifier_Attr new_decl_attr = ast::Static_Attr(initial_value, global);
+      symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+      // we don't need to typecheck init since it can only be constant or empty as a file scope variable
+   }
+
+   void typecheck_local_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols) {
+      if(var_decl->storage_class == ast::Storage_Class::EXTERN) {
+         if(var_decl->init) {
+            throw std::runtime_error(std::format("Local extern variable declaration {} has an initializer.", var_decl->name->text));
+         }
+         if(auto it = symbols.find(var_decl->name->text); it != symbols.end()) {
+            std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr> &old_decl = it->second;
+            ast::Int *old_int_type = dynamic_cast<ast::Int *>(old_decl.first.get());
+            if(!old_int_type) {
+               throw std::runtime_error(std::format("Function {} is being redeclared as a variable.", var_decl->name->text));
+            }
+         } else {
+            ast::Identifier_Attr new_decl_attr = ast::Static_Attr(ast::No_Initializer(), true);
+            symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+         }
+      }
+      else if(var_decl->storage_class == ast::Storage_Class::STATIC) {
+         ast::Initial_Value initial_value;
+         ast::Constant *constant = dynamic_cast<ast::Constant *>(var_decl->init);
+         if(constant) {
+            initial_value = ast::Initial(constant->val);
+         } else if(!var_decl->init) {
+            initial_value = ast::Initial(0);
+         } else {
+            throw std::runtime_error(std::format("Local static variable declaration {} has a non-constant initializer.", var_decl->name->text));
+         }
+         ast::Identifier_Attr new_decl_attr = ast::Static_Attr(initial_value, false);
+         symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+      }
+      else {
+         ast::Identifier_Attr new_decl_attr = ast::Local_Attr();
+         symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+         if(var_decl->init) {
+            typecheck_exp(var_decl->init, symbols);
+         }
       }
    }
 
-   void typecheck_function_declaration(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+   void typecheck_function_declaration(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols) {
       std::unique_ptr<ast::Fun_Type> fun_type = std::make_unique<ast::Fun_Type>(fun_decl->params.size());
       ast::Block *body = fun_decl->body;
       bool already_defined = false;
+      bool global = fun_decl->storage_class != ast::Storage_Class::STATIC;
 
-      if(symbols.count(fun_decl->name->text)) {
-         std::pair<std::unique_ptr<ast::Type>, bool> &old_decl = symbols[fun_decl->name->text];
+      if(auto it = symbols.find(fun_decl->name->text); it != symbols.end()) {
+         std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr> &old_decl = it->second;
          ast::Fun_Type *old_fun_type = dynamic_cast<ast::Fun_Type *>(old_decl.first.get());
          if(!old_fun_type || old_fun_type->param_count != fun_type->param_count) {
             throw std::runtime_error("Incompatible function declarations.");
          }
-         already_defined = old_decl.second;
+         if(!std::holds_alternative<ast::Fun_Attr>(old_decl.second)) {
+            throw std::runtime_error(std::format("Variable {} is being redeclared as a function.", fun_decl->name->text));
+         }
+         ast::Fun_Attr old_decl_attr = std::get<ast::Fun_Attr>(old_decl.second); // if its a function declaration, it will be a Fun_Attr
+         already_defined = old_decl_attr.defined;
          if(already_defined && body) {
             throw std::runtime_error("Function is defined more than once.");
          } 
+         if(old_decl_attr.global && fun_decl->storage_class == ast::Storage_Class::STATIC) {
+            throw std::runtime_error(std::format("Static function declaration {} follows non-static.", fun_decl->name->text));
+         }
+         global = old_decl_attr.global;
       }
-
-      symbols.insert_or_assign(fun_decl->name->text, std::make_pair(std::move(fun_type), already_defined || (body != nullptr)));
+      ast::Identifier_Attr fun_attr = ast::Fun_Attr(already_defined || body, global);
+      symbols.insert_or_assign(fun_decl->name->text, std::make_pair(std::move(fun_type), fun_attr));
       if (body) {
          for(auto &param : fun_decl->params) {
-            symbols.emplace(param->text, std::make_pair(std::make_unique<ast::Int>(), false));
+            symbols.emplace(param->text, std::make_pair(std::make_unique<ast::Int>(), ast::Local_Attr()));
          }
-         typecheck_block(body, symbols);
+         typecheck_block(body, symbols, false);
       }
    }
 
    // add type checking for statements later
-   void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+   void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope) {
       for(auto &item : block->block_items) {
          ast::D *d = dynamic_cast<ast::D *>(item.get());
          if(d) {
             if(dynamic_cast<ast::Var_Decl *>(d->declaration)) {
-               typecheck_variable_declaration(dynamic_cast<ast::Var_Decl *>(d->declaration), symbols);
+               if(is_file_scope) {
+                  typecheck_file_scope_variable_declaration(dynamic_cast<ast::Var_Decl *>(d->declaration), symbols);
+               } else {
+                  typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl *>(d->declaration), symbols);
+               }
             }
             else if(dynamic_cast<ast::Fun_Decl *>(d->declaration)) {
                typecheck_function_declaration(dynamic_cast<ast::Fun_Decl *>(d->declaration), symbols);
@@ -957,13 +1069,13 @@ namespace parser
          }
          ast::S *s = dynamic_cast<ast::S *>(item.get());
          if(s) {
-            typecheck_statement(s->statement, symbols);
+            typecheck_statement(s->statement, symbols, is_file_scope);
          }
       }
    }
 
    // add type checking for every other expression type later
-   void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+   void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols) {
       ast::Function_Call *function_call = dynamic_cast<ast::Function_Call *>(e);
       if(function_call) {
          auto it = symbols.find(function_call->identifier->text);
@@ -984,12 +1096,16 @@ namespace parser
       }
       ast::Var *var = dynamic_cast<ast::Var *>(e);
       if(var) {
-         std::pair<std::unique_ptr<ast::Type>, bool> &var_type = symbols[var->identifier->text];
-         ast::Int *int_type = dynamic_cast<ast::Int *>(var_type.first.get());
-         if(!int_type) {
-            throw std::runtime_error(std::format("Function name {} used as variable.", var->identifier->text));
+         if(auto it = symbols.find(var->identifier->text); it != symbols.end()) {
+            std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr> &var_type = it->second;
+            ast::Int *int_type = dynamic_cast<ast::Int *>(var_type.first.get());
+            if(!int_type) {
+               throw std::runtime_error(std::format("Function name {} used as variable.", var->identifier->text));
+            }
+            return;
+         } else {
+            throw std::runtime_error(std::format("Variable {} not defined or declared in scope.", var->identifier->text));
          }
-         return;
       }
       ast::Assignment *assignment = dynamic_cast<ast::Assignment *>(e);
       if(assignment) {
@@ -1023,7 +1139,7 @@ namespace parser
       }
    }
    
-   void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols) {
+   void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope) {
       ast::Expression_Statement *expression_statement = dynamic_cast<ast::Expression_Statement *>(statement);
       if(expression_statement) {
          typecheck_exp(expression_statement->exp, symbols);
@@ -1037,22 +1153,22 @@ namespace parser
       ast::If *if_statement = dynamic_cast<ast::If *>(statement);
       if(if_statement) {
          typecheck_exp(if_statement->condition, symbols);
-         typecheck_statement(if_statement->then_statement, symbols);
+         typecheck_statement(if_statement->then_statement, symbols, is_file_scope);
          if(if_statement->else_statement) {
-            typecheck_statement(if_statement->else_statement, symbols);
+            typecheck_statement(if_statement->else_statement, symbols, is_file_scope);
          }
          return;
       }
       ast::Compound_Statement *compound_statement = dynamic_cast<ast::Compound_Statement *>(statement);
       if(compound_statement) {
-         typecheck_block(compound_statement->block, symbols);
+         typecheck_block(compound_statement->block, symbols, is_file_scope);
          return;
       }
       ast::For *for_statement = dynamic_cast<ast::For *>(statement);
       if(for_statement) {
          ast::Init_Decl *init_decl = dynamic_cast<ast::Init_Decl *>(for_statement->init);
          if(init_decl) {
-            typecheck_variable_declaration(dynamic_cast<ast::Var_Decl *>(init_decl->variable_declaration), symbols);
+            typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl *>(init_decl->variable_declaration), symbols);
          }
          ast::Init_Exp *init_exp = dynamic_cast<ast::Init_Exp *>(for_statement->init);
          if(init_exp && init_exp->expression) {
@@ -1064,18 +1180,18 @@ namespace parser
          if(for_statement->post) {
             typecheck_exp(for_statement->post, symbols);
          }
-         typecheck_statement(for_statement->body, symbols);
+         typecheck_statement(for_statement->body, symbols, is_file_scope);
          return;
       }
       ast::While *while_statement = dynamic_cast<ast::While *>(statement);
       if(while_statement) {
          typecheck_exp(while_statement->condition, symbols);
-         typecheck_statement(while_statement->body, symbols);
+         typecheck_statement(while_statement->body, symbols, is_file_scope);
          return;
       }
       ast::DoWhile *do_while_statement = dynamic_cast<ast::DoWhile *>(statement);
       if(do_while_statement) {
-         typecheck_statement(do_while_statement->body, symbols);
+         typecheck_statement(do_while_statement->body, symbols, is_file_scope);
          typecheck_exp(do_while_statement->condition, symbols);
          return;
       }
@@ -1100,6 +1216,12 @@ namespace parser
          else if(tokens.front() == "void")
          {
             tokens.pop_front();
+            if(!params.empty()) {
+               throw std::runtime_error(std::format("More than one parameter in function {} declared with a void parameter.", func_name));
+            }
+            if(!tokens.empty() && tokens.front() != ")") {
+               throw std::runtime_error(std::format("Expected * after void in parameter list of function {}.", func_name));
+            }
             break;
          }
          else
@@ -1169,7 +1291,7 @@ namespace parser
          }
 
          resolve_declaration(declaration, identifier_map, true);
-         typecheck_declaration(declaration, symbols); // type checking after resolution
+         typecheck_declaration(declaration, symbols, true); // type checking after resolution
          declarations.emplace_back(declaration);
       }
       if (!tokens.empty())
@@ -1179,8 +1301,6 @@ namespace parser
 
       identifier_map.clear();
       type_aliases.clear();
-      symbols.clear();
-
 
       return new ast::Program(std::move(declarations), std::move(global_expressions));
    }

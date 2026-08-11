@@ -12,8 +12,10 @@
 #include "ast/declarations/declarations.hpp"
 #include "ast/block/block.hpp"
 #include "ast/storage_class/storage_classes.hpp"
+#include "ast/identifier_attrs/identifier_attr.hpp"
 #include <memory>
 #include <regex>
+#include "compiler/symbols.hpp"
 
 namespace parser
 {
@@ -57,7 +59,6 @@ namespace parser
   };
   extern std::unordered_map<std::string, MapEntry> identifier_map; // formerly known as variable_map
   extern std::unordered_map<std::string, std::string> type_aliases; // maps types to typedef aliases
-  extern std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> symbols; // maps variable names to types
   extern uint32_t var_counter;
   void expect(std::string expected, std::list<std::string> &tokens);
   std::string make_temporary(std::string s);
@@ -77,7 +78,7 @@ namespace parser
   void resolve_block(ast::Block *block, std::unordered_map<std::string, MapEntry> &identifier_map, bool is_file_scope);
   void resolve_exp(ast::Expression *e, std::unordered_map<std::string, MapEntry> &identifier_map);
   void resolve_declaration(ast::Declaration *declaration, std::unordered_map<std::string, MapEntry> &identifier_map, bool is_file_scope);
-  void resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map);
+  void resolve_var_decl(ast::Var_Decl *var_decl, std::unordered_map<std::string, MapEntry> &identifier_map, bool is_file_scope);
   void resolve_fun_decl(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, MapEntry> &identifier_map, bool is_file_scope);
   void resolve_params(ast::Identifier *identifier, std::unordered_map<std::string, MapEntry> &identifier_map);
   void resolve_statement(ast::Statement *statement, std::unordered_map<std::string, MapEntry> &identifier_map);
@@ -86,11 +87,13 @@ namespace parser
   ast::Statement *annotate(ast::Statement *statement, ast::Identifier *current_label);
   ast::Statement *label_statement(ast::Statement *statement, ast::Identifier *current_label);
   ast::Block *label_block(ast::Block *block, ast::Identifier *current_label);
-  void typecheck_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
-  void typecheck_function_declaration(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
-  void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
-  void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
-  void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, bool>> &symbols);
+  void typecheck_declaration(ast::Declaration *declaration, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope);
+  void typecheck_file_scope_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols);
+  void typecheck_local_variable_declaration(ast::Var_Decl *var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols);
+  void typecheck_function_declaration(ast::Fun_Decl *fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols);
+  void typecheck_block(ast::Block *block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope);
+  void typecheck_exp(ast::Expression *e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols);
+  void typecheck_statement(ast::Statement *statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> &symbols, bool is_file_scope);
   void parse_parameters(std::list<std::string> &tokens, std::vector<std::unique_ptr<ast::Identifier>> &params, const std::string &func_name);
   std::pair<ast::Type *, ast::Storage_Class> parse_type_and_storage_class(std::list<std::string> &tokens);
   ast::Program *parse_program(std::list<std::string> &tokens);

@@ -1,6 +1,8 @@
+#include "ast/initial_values/initial_value.hpp"
 #include "tacky/tacky.hpp"
 #include "ast/ast.hpp"
 #include "compiler/ir_gen.hpp"
+#include "compiler/symbols.hpp"
 #include <vector>
 #include <string>
 #include <memory>
@@ -417,7 +419,7 @@ namespace ir_gen
             {
                ast::Var_Decl *var_decl = dynamic_cast<ast::Var_Decl *>(d->declaration);
                if(var_decl) {
-                  emit_tacky(var_decl->init, instructions, values);
+                  emit_variable_initialization(var_decl, instructions, values);
                }
                // again we don't need to handle function declarations since you cannot define functions within function definitions
             }
@@ -551,8 +553,20 @@ namespace ir_gen
       }
    }
 
+   void emit_variable_initialization(ast::Var_Decl *var_decl, std::vector<std::unique_ptr<tacky::Instruction>> &instructions, std::vector<std::unique_ptr<tacky::Val>> &values)
+   {
+      if(var_decl->init && var_decl->storage_class == ast::Storage_Class::NONE) {
+         tacky::Val *init_result = emit_tacky(var_decl->init, instructions, values);
+         tacky::Identifier *var_identifier = new tacky::Identifier(var_decl->name->text);
+         std::unique_ptr<tacky::Var> var = std::make_unique<tacky::Var>(var_identifier);
+         std::unique_ptr<tacky::Copy> copy = std::make_unique<tacky::Copy>(init_result, var.get());
+         instructions.push_back(std::move(copy));
+         values.push_back(std::move(var));
+      }
+   }
+
    // This function converts AST function to Tacky function
-   tacky::Function *generate_function(ast::Fun_Decl *function_declaration)
+   tacky::Function generate_function(ast::Fun_Decl *function_declaration)
    {
       std::vector<std::unique_ptr<tacky::Identifier>> params;
       for(auto &param : function_declaration->params) {
@@ -561,8 +575,10 @@ namespace ir_gen
       std::vector<std::unique_ptr<tacky::Instruction>> instructions;
       std::vector<std::unique_ptr<tacky::Val>> values;
       ast::Identifier *a_identifier = function_declaration->name;
-      tacky::Identifier *t_identifier = new tacky::Identifier(a_identifier->text);
+      std::unique_ptr<tacky::Identifier> t_identifier = std::make_unique<tacky::Identifier>(a_identifier->text);
       bool has_return = false; // variable to track whether a return happens in all paths of function
+      std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr> &type_and_attr = symbols::symbols.find(function_declaration->name->text)->second;
+      ast::Fun_Attr fun_attr = std::get<ast::Fun_Attr>(type_and_attr.second);
       for (std::unique_ptr<ast::Block_Item> &b : function_declaration->body->block_items)
       {
          ast::D *d = dynamic_cast<ast::D *>(b.get());
@@ -571,7 +587,7 @@ namespace ir_gen
          {
             ast::Var_Decl *var_decl = dynamic_cast<ast::Var_Decl *>(d->declaration);
             if(var_decl) {
-               emit_tacky(var_decl->init, instructions, values);
+               emit_variable_initialization(var_decl, instructions, values);
             }
             // we don't need to handle function declarations since you cannot define functions within function definitions
          }
@@ -581,7 +597,7 @@ namespace ir_gen
             ast::Return *ret = dynamic_cast<ast::Return *>(s->statement);
             if (ret)
             {
-               return new tacky::Function(t_identifier, std::move(params), std::move(instructions), std::move(values));
+               return tacky::Function(std::move(t_identifier), std::move(params), std::move(instructions), std::move(values), fun_attr.global);
             }
          }
       }
@@ -594,20 +610,39 @@ namespace ir_gen
          values.push_back(std::move(const_zero));
          instructions.push_back(std::move(default_return));
       }
-      return new tacky::Function(t_identifier, std::move(params), std::move(instructions), std::move(values));
+      return tacky::Function(std::move(t_identifier), std::move(params), std::move(instructions), std::move(values), fun_attr.global);
+   }
+
+   void generate_static_variables(std::vector<tacky::Top_Level>& top_levels)
+   {
+      for(auto &[name, type_and_attr] : symbols::symbols)
+      {
+         ast::Identifier_Attr identifier_attr = type_and_attr.second;
+         if(holds_alternative<ast::Static_Attr>(identifier_attr)) {
+            ast::Static_Attr static_attr = get<ast::Static_Attr>(identifier_attr);
+            if(std::holds_alternative<ast::Initial>(static_attr.init)) {
+               ast::Initial initial = get<ast::Initial>(static_attr.init);
+               top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), initial.value, static_attr.global));
+            } else if(std::holds_alternative<ast::Tentative>(static_attr.init)) {
+               top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), 0, static_attr.global));
+            } else if(std::holds_alternative<ast::No_Initializer>(static_attr.init)) continue; // no initializer, skip
+         }
+      }
    }
 
    // This function converts AST program to Tacky program
    tacky::Program *generate_tacky(ast::Program *program)
    {
-      std::vector<std::unique_ptr<tacky::Function>> function_definitions;
-      for(auto &fun_decl : program->functions_declarations)
+      std::vector<tacky::Top_Level> top_levels;
+      for(auto &declaration : program->declarations)
       {
-         if(fun_decl->body != nullptr) {
-            function_definitions.emplace_back(generate_function(fun_decl.get()));
+         ast::Fun_Decl *fun_decl = dynamic_cast<ast::Fun_Decl *>(declaration.get());
+         if(fun_decl && fun_decl->body != nullptr) {
+            top_levels.emplace_back(generate_function(fun_decl));
          }
       }
-      tacky::Program *tacky = new tacky::Program(std::move(function_definitions));
+      generate_static_variables(top_levels);
+      tacky::Program *tacky = new tacky::Program(std::move(top_levels));
       return tacky;
    }
 }
