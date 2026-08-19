@@ -1,5 +1,6 @@
 #include "ast/ast.hpp"
 #include "ast/identifier_attrs/identifier_attr.hpp"
+#include "ast/storage_class/storage_classes.hpp"
 #include "compiler/parser.hpp"
 #include "compiler/symbols.hpp"
 #include <stdexcept>
@@ -23,7 +24,6 @@ namespace parser
    // For Parsing Expressions
    std::unordered_map<std::string, MapEntry> identifier_map; // formerly known as variable_map
    std::unordered_map<std::string, std::string> type_aliases; // maps types to typedef aliases
-   std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
    uint32_t var_counter = 0;
 
    // This Function Matches A Token Against Legal Syntax
@@ -755,16 +755,19 @@ namespace parser
          resolve_block(compound_statement->block, new_identifier_map, false);
          return;
       }
+      std::string dummy_text;
       ast::Break *break_statement = dynamic_cast<ast::Break *>(statement);
       if (break_statement) {
+         dummy_text = break_statement->label->text;
          delete break_statement->label;
-         break_statement->label = make_label(break_statement->label->text);
+         break_statement->label = make_label(dummy_text);
          return;
       }
       ast::Continue *continue_statement = dynamic_cast<ast::Continue *>(statement);
       if (continue_statement) {
+         dummy_text = continue_statement->label->text;
          delete continue_statement->label;
-         continue_statement->label = make_label(continue_statement->label->text);
+         continue_statement->label = make_label(dummy_text);
          return;
       }
       ast::For *for_statement = dynamic_cast<ast::For *>(statement);
@@ -774,24 +777,27 @@ namespace parser
          resolve_optional_exp(for_statement->condition, new_identifier_map);
          resolve_optional_exp(for_statement->post, new_identifier_map);
          resolve_statement(for_statement->body, new_identifier_map);
+         dummy_text = for_statement->label->text;
          delete for_statement->label;
-         for_statement->label = make_label(for_statement->label->text);
+         for_statement->label = make_label(dummy_text);
          return;
       }
       ast::While *while_statement = dynamic_cast<ast::While *>(statement);
       if (while_statement) {
          resolve_exp(while_statement->condition, identifier_map);
          resolve_statement(while_statement->body, identifier_map);
+         dummy_text = while_statement->label->text;
          delete while_statement->label;
-         while_statement->label = make_label(while_statement->label->text);
+         while_statement->label = make_label(dummy_text);
          return;
       }
       ast::DoWhile *do_while_statement = dynamic_cast<ast::DoWhile *>(statement);
       if (do_while_statement) {
          resolve_statement(do_while_statement->body, identifier_map);
          resolve_exp(do_while_statement->condition, identifier_map);
+         dummy_text = do_while_statement->label->text;
          delete do_while_statement->label;
-         do_while_statement->label = make_label(do_while_statement->label->text);
+         do_while_statement->label = make_label(dummy_text);
          return;
       }
    }
@@ -800,6 +806,10 @@ namespace parser
       ast::Init_Decl *init_decl = dynamic_cast<ast::Init_Decl *>(init);
       ast::Init_Exp *init_exp = dynamic_cast<ast::Init_Exp *>(init);
       if(init_decl) {
+         if(init_decl->variable_declaration->storage_class != ast::Storage_Class::NONE)
+         {
+            throw std::runtime_error("Declarations in for loops must not contain specifiers.");
+         }
          resolve_declaration(init_decl->variable_declaration, identifier_map, false);
       } else if (init_exp) {
          resolve_optional_exp(init_exp->expression, identifier_map);
@@ -1291,7 +1301,7 @@ namespace parser
          }
 
          resolve_declaration(declaration, identifier_map, true);
-         typecheck_declaration(declaration, symbols, true); // type checking after resolution
+         typecheck_declaration(declaration, symbols::symbols, true); // type checking after resolution
          declarations.emplace_back(declaration);
       }
       if (!tokens.empty())

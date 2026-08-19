@@ -1,6 +1,5 @@
 #pragma once
 #include "tacky/top_level/identifier.hpp"
-#include "tacky/top_level/identifier.hpp"
 #include <memory>
 #include <utility>
 

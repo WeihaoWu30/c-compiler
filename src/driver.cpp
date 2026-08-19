@@ -13,6 +13,12 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
+
+namespace symbols
+{
+  std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
+}
+
 namespace driver {
   /*
   This function calls the GCC driver to remove comments and trims whitespace in the C file provided.

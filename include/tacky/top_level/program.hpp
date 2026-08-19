@@ -2,7 +2,7 @@
 #include "tacky/top_level/function.hpp"
 #include "tacky/top_level/static_variable.hpp"
 #include <vector>
-#include <memory>
+#include <utility>
 #include <variant>
 
 namespace tacky

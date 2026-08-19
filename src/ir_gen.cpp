@@ -511,7 +511,7 @@ namespace ir_gen
          ast::Init_Exp *init_expression = dynamic_cast<ast::Init_Exp *>(for_init);
          if(init_declaration)
          {
-            emit_tacky(init_declaration->variable_declaration->init, instructions, values);
+            emit_variable_initialization(init_declaration->variable_declaration, instructions, values);
          } else if(init_expression) {
             emit_tacky(init_expression->expression, instructions, values);
          }

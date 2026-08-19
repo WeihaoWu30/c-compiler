@@ -6,8 +6,8 @@ namespace aast
 {
   struct Identifier
   {
-    std::string name;
-    Identifier(std::string &name_) : name(name_) {}
+    std::string text;
+    Identifier(std::string &text_) : text(text_) {}
     friend std::ostream &operator<<(std::ostream &ostr,
                                     const Identifier &identifier);
   };
