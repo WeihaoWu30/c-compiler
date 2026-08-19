@@ -10,17 +10,15 @@ namespace tacky
 {
   struct Function
   {
-    Identifier *identifier;
+    std::unique_ptr<Identifier> identifier;
     std::vector<std::unique_ptr<Identifier>> params;
     std::vector<std::unique_ptr<Instruction>> body;
     std::vector<std::unique_ptr<Val>> values;
-    Function(Identifier *identifer_,
+    bool global;
+    Function(std::unique_ptr<Identifier> identifer_,
              std::vector<std::unique_ptr<Identifier>> params_,
              std::vector<std::unique_ptr<Instruction>> body_,
-             std::vector<std::unique_ptr<Val>> values_) : identifier(identifer_), params(std::move(params_)), body(std::move(body_)), values(std::move(values_)) {}
-    ~Function()
-    {
-      delete identifier;
-    }
+             std::vector<std::unique_ptr<Val>> values_,
+             bool global_) : identifier(std::move(identifer_)), params(std::move(params_)), body(std::move(body_)), values(std::move(values_)), global(global_) {}
   };
 }

@@ -63,7 +63,7 @@ namespace codegen
     void generate_jmp(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions);
     void generate_label(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions);
     void generate_copy(tacky::Instruction *instruction, std::list<std::unique_ptr<aast::Instruction>> &assembly_instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    void generate_instructions(tacky::Function *func, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
+    void generate_instructions(std::vector<std::unique_ptr<tacky::Instruction>> &body, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
     aast::Stack *replace_pseudo(aast::Pseudo *pseudo, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
     void fix_mov(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
     void fix_unary(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
@@ -75,6 +75,7 @@ namespace codegen
     void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator &it, std::vector<std::unique_ptr<aast::Operand>> &operands, StackManager &stack_manager);
     void copy_parameters(std::vector<std::unique_ptr<tacky::Identifier>> &params, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
     void compiler_pass(StackManager &stack_manager, std::list<std::unique_ptr<aast::Instruction>> &instructions, std::vector<std::unique_ptr<aast::Operand>> &operands);
-    aast::Function *generate_function(tacky::Function *func);
+    aast::Function generate_function(tacky::Function *func);
+    aast::Static_Variable generate_static_variable(tacky::Static_Variable *static_variable);
     aast::Program *generate_top_level(tacky::Program *tacky_program);
 }

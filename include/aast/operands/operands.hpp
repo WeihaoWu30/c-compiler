@@ -3,3 +3,4 @@
 #include "aast/operands/pseudo.hpp"
 #include "aast/operands/reg.hpp"
 #include "aast/operands/stack.hpp"
+#include "aast/operands/data.hpp"

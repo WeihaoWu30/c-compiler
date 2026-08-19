@@ -2,7 +2,6 @@
 #include "ast/top_level/program.hpp"
 #include "tacky/top_level/program.hpp"
 #include "compiler/compiler.hpp"
-#include "compiler/driver.hpp"
 #include <cstring>
 #include <fstream>
 #include <list>
@@ -14,6 +13,12 @@
 #include <cstdlib>
 #include <memory>
 #include <vector>
+
+namespace symbols
+{
+  std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
+}
+
 namespace driver {
   /*
   This function calls the GCC driver to remove comments and trims whitespace in the C file provided.
@@ -117,6 +122,7 @@ int main(int argc, char *argv[])
     std::string output_filename;
     for(;i < argc; ++i) {
       std::string filename(argv[i]);
+      symbols::symbols.clear(); // clear the symbols map to avoid conflicts between files
       driver::preprocess(filename);
       tokens = lexer::lex(std::string(driver::PREPROCESSED_FILE));
       if (stop == driver::Stage::Lex)

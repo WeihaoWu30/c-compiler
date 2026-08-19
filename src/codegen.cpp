@@ -1,6 +1,7 @@
 #include "aast/aast.hpp"
 #include "tacky/tacky.hpp"
 #include "compiler/codegen.hpp"
+#include "compiler/symbols.hpp"
 #include <iostream>
 #include <list>
 #include <vector>
@@ -9,6 +10,7 @@
 #include <utility>
 #include <algorithm>
 #include <cstddef>
+#include <variant>
 
 namespace codegen
 {
@@ -32,6 +34,13 @@ namespace codegen
     else if (t_var)
     {
       aast::Identifier *assembly_identifier = new aast::Identifier(t_var->identifier->name);
+      if(auto it = symbols::symbols.find(t_var->identifier->name); it != symbols::symbols.end()) {
+        if(std::holds_alternative<ast::Static_Attr>(it->second.second)) {
+          std::unique_ptr<aast::Data> data = std::make_unique<aast::Data>(assembly_identifier);
+          operands.push_back(std::move(data));
+          return operands.back().get();
+        }
+      }
       std::unique_ptr<aast::Pseudo> pseudo_identifier = std::make_unique<aast::Pseudo>(assembly_identifier);
       operands.push_back(std::move(pseudo_identifier));
       return operands.back().get();
@@ -442,7 +451,7 @@ namespace codegen
     StackManager &stack_manager
   )
   {
-    std::string var(pseudo->identifier->name);
+    std::string var(pseudo->identifier->text);
     if (!stack_manager.stack_offset.count(var))
     { // Only add New Locations Crreated
       stack_manager.total_bytes_to_reserve += 4;
@@ -465,31 +474,37 @@ namespace codegen
     aast::Mov *mov = dynamic_cast<aast::Mov *>(it->get());
     if (!mov)
       return;
-    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(mov->src);
-    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(mov->dst);
+    aast::Pseudo *src_pseudo = dynamic_cast<aast::Pseudo *>(mov->src);
+    aast::Pseudo *dst_pseudo = dynamic_cast<aast::Pseudo *>(mov->dst);
+    aast::Data *src_data = dynamic_cast<aast::Data *>(mov->src);
+    aast::Data *dst_data = dynamic_cast<aast::Data *>(mov->dst);
     aast::Stack *src_stack = dynamic_cast<aast::Stack *>(mov->src);
     aast::Stack *dst_stack = dynamic_cast<aast::Stack *>(mov->dst);
-    if ((src && dst) || (src_stack && dst_stack) || (src_stack && dst) || (src && dst_stack))
-    { // separate into 2 instructions using r10d register
-      if(!src_stack) src_stack = replace_pseudo(src, operands, stack_manager);
-      if(!dst_stack) dst_stack = replace_pseudo(dst, operands, stack_manager);
+    if ((src_pseudo || src_stack || src_data) && (dst_pseudo || dst_stack || dst_data))
+    { 
+      // parameters will have a stack address as operand so we can't set it to nullptr if it isn't a pseudo
+      if(src_pseudo) src_stack = replace_pseudo(src_pseudo, operands, stack_manager);
+      if(dst_pseudo) dst_stack = replace_pseudo(dst_pseudo, operands, stack_manager);
 
+      // separate into 2 instructions using r10d register
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
-      std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(src_stack, reg.get()); // copies src to register
+      std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(
+        (src_stack ? static_cast<aast::Operand *>(src_stack) : static_cast<aast::Operand *>(src_data)), reg.get()
+      ); // copies src to register
 
-      mov->src = reg.get();                             // replaces current temporary variable with register
-      mov->dst = dst_stack;                             // new address
+      mov->src = reg.get(); // replaces current temporary variable with register
+      mov->dst = dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(dst_data); 
       it = instructions.insert(it, std::move(new_mov)); // Inserts before the current Mov Instruction
       operands.push_back(std::move(reg));
     }
-    else if (src)
+    else if (src_pseudo)
     {
-      src_stack = replace_pseudo(src, operands, stack_manager);
+      src_stack = replace_pseudo(src_pseudo, operands, stack_manager);
       mov->src = src_stack;
     }
-    else if (dst)
+    else if (dst_pseudo)
     {
-      dst_stack = replace_pseudo(dst, operands, stack_manager);
+      dst_stack = replace_pseudo(dst_pseudo, operands, stack_manager);
       mov->dst = dst_stack;
     }
   }
@@ -527,24 +542,28 @@ namespace codegen
     if (!shl && !sar)
       return;
 
-    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
-    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
-    if (operand1)
+    aast::Pseudo *operand1_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Data *operand1_data = dynamic_cast<aast::Data *>(binary->operand1);
+    if (operand1_pseudo || operand1_data)
     {
-      aast::Stack *src_stack = replace_pseudo(operand1, operands, stack_manager);
+      aast::Stack *src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : nullptr;
       std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::DWORD);
       std::unique_ptr<aast::Reg> reg2 = std::make_unique<aast::Reg>(aast::RegType::CX, aast::Size::BYTE);
-      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg1.get());
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(
+        src_stack ? static_cast<aast::Operand *>(src_stack) : static_cast<aast::Operand *>(operand1_data), reg1.get()
+      );
       binary->operand1 = reg2.get();
       operands.push_back(std::move(reg1));
       operands.push_back(std::move(reg2));
 
       it = instructions.insert(it, std::move(mov));
     }
-    if (operand2)
+    aast::Pseudo *operand2_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Data *operand2_data = dynamic_cast<aast::Data *>(binary->operand2);
+    if (operand2_pseudo || operand2_data)
     {
-      aast::Stack *dst_stack = replace_pseudo(operand2, operands, stack_manager);
-      binary->operand2 = dst_stack;
+      aast::Stack *dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : nullptr;
+      binary->operand2 = dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(operand2_data);
     }
 
     aast::Reg *reg = dynamic_cast<aast::Reg *>(binary->operand1);
@@ -575,30 +594,34 @@ namespace codegen
     aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
     if (mult)
       return;
-    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(binary->operand1);
-    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Pseudo *operand1_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Data *operand1_data = dynamic_cast<aast::Data *>(binary->operand1);
+    aast::Pseudo *operand2_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Data *operand2_data = dynamic_cast<aast::Data *>(binary->operand2);
     aast::Stack *src_stack = nullptr, *dst_stack = nullptr;
-    if (operand1 && operand2)
+    if ((operand1_pseudo || operand1_data) && (operand2_pseudo || operand2_data))
     { // same as mov with 2 addresses
-      src_stack = replace_pseudo(operand1, operands, stack_manager);
-      dst_stack = replace_pseudo(operand2, operands, stack_manager);
+      src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : nullptr;
+      dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : nullptr;
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
-      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(
+        src_stack ? static_cast<aast::Operand *>(src_stack) : static_cast<aast::Operand *>(operand1_data), reg.get()
+      );
 
       binary->operand1 = reg.get();
-      binary->operand2 = dst_stack;
+      binary->operand2 = dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(operand2_data);
       it = instructions.insert(it, std::move(mov));
       operands.push_back(std::move(reg));
     }
-    else if (operand1)
+    else if (operand1_pseudo)
     {
-      src_stack = replace_pseudo(operand1, operands, stack_manager);
+      src_stack = replace_pseudo(operand1_pseudo, operands, stack_manager);
       binary->operand1 = src_stack;
     }
-    else if (operand2)
+    else if (operand2_pseudo)
     {
-      dst_stack = replace_pseudo(operand2, operands, stack_manager);
+      dst_stack = replace_pseudo(operand2_pseudo, operands, stack_manager);
       binary->operand2 = dst_stack;
     }
 
@@ -629,24 +652,30 @@ namespace codegen
     aast::Mult *mult = dynamic_cast<aast::Mult *>(binary->binary_operator);
     if (!mult)
       return;
-    aast::Pseudo *src = dynamic_cast<aast::Pseudo *>(binary->operand1);
-    aast::Pseudo *dst = dynamic_cast<aast::Pseudo *>(binary->operand2);
-    if (src)
+    aast::Pseudo *src_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand1);
+    aast::Data *src_data = dynamic_cast<aast::Data *>(binary->operand1);
+    aast::Pseudo *dst_pseudo = dynamic_cast<aast::Pseudo *>(binary->operand2);
+    aast::Data *dst_data = dynamic_cast<aast::Data *>(binary->operand2);
+    if (src_pseudo || src_data)
     {
-      aast::Stack *src_stack = replace_pseudo(src, operands, stack_manager);
-      binary->operand1 = src_stack;
+      aast::Stack *src_stack = src_pseudo ? replace_pseudo(src_pseudo, operands, stack_manager) : nullptr;
+      binary->operand1 = src_stack ? static_cast<aast::Operand *>(src_stack) : static_cast<aast::Operand *>(src_data);
     }
-    if (dst)
+    if (dst_pseudo || dst_data)
     {
-      aast::Stack *dst_stack = replace_pseudo(dst, operands, stack_manager);
+      aast::Stack *dst_stack = dst_pseudo ? replace_pseudo(dst_pseudo, operands, stack_manager) : nullptr;
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R11, aast::Size::DWORD);
-      std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(dst_stack, reg.get()); // copies address content into register
-      binary->operand2 = reg.get();                                                        // multiplies constant by content in register
+      std::unique_ptr<aast::Mov> mov1 = std::make_unique<aast::Mov>(
+        dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(dst_data), reg.get()
+      ); // copies address content into register
+      binary->operand2 = reg.get(); // multiplies constant by content in register
       instructions.insert(it, std::move(mov1));
       ++it;
 
-      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(reg.get(), dst_stack); // copies register content to the original address;
+      std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(
+        reg.get(), dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(dst_data)
+      ); // copies register content to the original address;
       it = instructions.insert(it, std::move(mov2));
 
       operands.push_back(std::move(reg));
@@ -664,12 +693,13 @@ namespace codegen
     aast::Idiv *idiv = dynamic_cast<aast::Idiv *>(it->get());
     if (!idiv)
       return;
-    aast::Pseudo *pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand);
+    aast::Pseudo *operand_pseudo = dynamic_cast<aast::Pseudo *>(idiv->operand);
+    aast::Data *operand_data = dynamic_cast<aast::Data *>(idiv->operand);
     aast::Imm *imm_val = dynamic_cast<aast::Imm *>(idiv->operand);
-    if (pseudo)
+    if (operand_pseudo || operand_data)
     {
-      aast::Stack *stack = replace_pseudo(pseudo, operands, stack_manager);
-      idiv->operand = stack;
+      aast::Stack *stack = operand_pseudo ? replace_pseudo(operand_pseudo, operands, stack_manager) : nullptr;
+      idiv->operand = stack ? static_cast<aast::Operand *>(stack) : static_cast<aast::Operand *>(operand_data);
     }
     else if (imm_val)
     {
@@ -693,32 +723,36 @@ namespace codegen
     aast::Cmp *cmp = dynamic_cast<aast::Cmp *>(it->get());
     if (!cmp)
       return;
-    aast::Pseudo *operand1 = dynamic_cast<aast::Pseudo *>(cmp->operand1);
-    aast::Pseudo *operand2 = dynamic_cast<aast::Pseudo *>(cmp->operand2);
+    aast::Pseudo *operand1_pseudo = dynamic_cast<aast::Pseudo *>(cmp->operand1);
+    aast::Data *operand1_data = dynamic_cast<aast::Data *>(cmp->operand1);
+    aast::Pseudo *operand2_pseudo = dynamic_cast<aast::Pseudo *>(cmp->operand2);
+    aast::Data *operand2_data = dynamic_cast<aast::Data *>(cmp->operand2);
     aast::Stack *src_stack = nullptr,
                 *dst_stack = nullptr;
-    if (operand1 && operand2)
+    if ((operand1_pseudo || operand1_data) && (operand2_pseudo || operand2_data))
     {
-      src_stack = replace_pseudo(operand1, operands, stack_manager);
-      dst_stack = replace_pseudo(operand2, operands, stack_manager);
+      src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : nullptr;
+      dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : nullptr;
 
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
       cmp->operand1 = reg.get();
-      cmp->operand2 = dst_stack;
+      cmp->operand2 = dst_stack ? static_cast<aast::Operand *>(dst_stack) : static_cast<aast::Operand *>(operand2_data);
 
-      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src_stack, reg.get());
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(
+        src_stack ? static_cast<aast::Operand *>(src_stack) : static_cast<aast::Operand *>(operand1_data), reg.get()
+      );
       it = instructions.insert(it, std::move(mov));
 
       operands.push_back(std::move(reg));
     }
-    else if (operand1)
+    else if (operand1_pseudo)
     {
-      src_stack = replace_pseudo(operand1, operands, stack_manager);
+      src_stack = replace_pseudo(operand1_pseudo, operands, stack_manager);
       cmp->operand1 = src_stack;
     }
-    else if (operand2)
+    else if (operand2_pseudo)
     {
-      dst_stack = replace_pseudo(operand2, operands, stack_manager);
+      dst_stack = replace_pseudo(operand2_pseudo, operands, stack_manager);
       cmp->operand2 = dst_stack;
     }
 
@@ -763,7 +797,7 @@ namespace codegen
     std::vector<std::unique_ptr<aast::Operand>> &operands
   )
   {
-    // aast::ll of the replacements follow the same steps: create aast::Stack struct, delete aast::Pseudo, replace with aast::Stack struct
+    // all of the replacements replace aast::Pseudo with aast::Stack or aast::Data
     for (typename std::list<std::unique_ptr<aast::Instruction>>::iterator it = instructions.begin(); it != instructions.end(); ++it)
     {
       fix_mov(it, instructions, operands, stack_manager);
@@ -810,9 +844,8 @@ namespace codegen
     }
   }
 
-  aast::Function *generate_function(tacky::Function *func)
+  aast::Function generate_function(tacky::Function *func)
   {
-    aast::Identifier *identifier = new aast::Identifier(func->identifier->name);
     std::vector<std::unique_ptr<aast::Operand>> operands;
     std::list<std::unique_ptr<aast::Instruction>> instructions;
 
@@ -826,18 +859,27 @@ namespace codegen
     StackManager stack_manager;
     compiler_pass(stack_manager, instructions, operands); // Convert after We allocate all needed temporary Variables
 
-    return new aast::Function(identifier, std::move(instructions), std::move(operands));
+    return aast::Function(std::make_unique<aast::Identifier>(func->identifier->name), std::move(instructions), std::move(operands), func->global);
+  }
+
+  aast::Static_Variable generate_static_variable(tacky::Static_Variable *static_variable)
+  {
+    return aast::Static_Variable(std::make_unique<aast::Identifier>(static_variable->identifier->name), static_variable->init, static_variable->global);
   }
 
   // This function converts Tacky nodes to assembly instructions
   aast::Program *generate_top_level(tacky::Program *tacky_program)
   {
-    std::vector<std::unique_ptr<aast::Function>> function_definitions;
-    for(auto &func : tacky_program->function_definitions)
+    std::vector<aast::Top_Level> top_levels;
+    for(auto &top_level : tacky_program->top_levels)
     {
-      function_definitions.emplace_back(generate_function(func.get()));
+      if(std::holds_alternative<tacky::Function>(top_level)) {
+        top_levels.emplace_back(generate_function(std::get_if<tacky::Function>(&top_level)));
+      } else if(std::holds_alternative<tacky::Static_Variable>(top_level)) {
+        top_levels.emplace_back(generate_static_variable(std::get_if<tacky::Static_Variable>(&top_level)));
+      }
     }
-    aast::Program *program = new aast::Program(std::move(function_definitions));
+    aast::Program *program = new aast::Program(std::move(top_levels));
     return program;
   }
 }
