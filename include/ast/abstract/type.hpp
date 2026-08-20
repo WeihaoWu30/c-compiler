@@ -1,7 +1,7 @@
 #pragma once
 
 namespace ast {
-    struct Type {
-        virtual ~Type() = default;
-    };
-}
+  struct Type {
+    virtual ~Type() = default;
+  };
+} // namespace ast

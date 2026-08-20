@@ -3,16 +3,11 @@
 #include "tacky/abstract/val.hpp"
 #include "tacky/top_level/identifier.hpp"
 
-namespace tacky
-{
-  struct JumpIfZero : Instruction
-  {
-    Val *condition;
-    Identifier *target;
-    JumpIfZero(Val *condition_, Identifier *target_) : condition(condition_), target(target_) {}
-    ~JumpIfZero()
-    {
-      delete target;
-    }
+namespace tacky {
+  struct JumpIfZero : Instruction {
+    Val* condition;
+    Identifier* target;
+    JumpIfZero(Val* condition_, Identifier* target_) : condition(condition_), target(target_) {}
+    ~JumpIfZero() { delete target; }
   };
-}
+} // namespace tacky

@@ -1,10 +1,8 @@
 #pragma once
 #include <cstdint>
 
-namespace ast
-{
-  enum class Compound_Operator : uint8_t
-  {
+namespace ast {
+  enum class Compound_Operator : uint8_t {
     AdditionAssignment,
     SubtractionAssignment,
     MultiplicationAssignment,

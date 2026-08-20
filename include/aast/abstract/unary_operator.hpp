@@ -1,20 +1,17 @@
 #pragma once
-#include <string>
 #include <ostream>
+#include <string>
 
-namespace aast
-{
-  struct Unary_Operator
-  {
+namespace aast {
+  struct Unary_Operator {
   public:
     virtual ~Unary_Operator() = default;
 
   protected:
     std::string instruction;
-    friend std::ostream &operator<<(std::ostream &ostr, const Unary_Operator &unary_operator)
-    {
+    friend std::ostream& operator<<(std::ostream& ostr, const Unary_Operator& unary_operator) {
       ostr << unary_operator.instruction;
       return ostr;
     }
   };
-}
+} // namespace aast

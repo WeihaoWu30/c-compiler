@@ -1,35 +1,28 @@
 #pragma once
 #include "aast/abstract/cond_code.hpp"
 
-namespace aast
-{
-  struct E : Cond_Code
-  {
+namespace aast {
+  struct E : Cond_Code {
     E() { code = "e"; }
   };
 
-  struct NE : Cond_Code
-  {
+  struct NE : Cond_Code {
     NE() { code = "ne"; }
   };
 
-  struct G : Cond_Code
-  {
+  struct G : Cond_Code {
     G() { code = "g"; }
   };
 
-  struct GE : Cond_Code
-  {
+  struct GE : Cond_Code {
     GE() { code = "ge"; }
   };
 
-  struct L : Cond_Code
-  {
+  struct L : Cond_Code {
     L() { code = "l"; }
   };
 
-  struct LE : Cond_Code
-  {
+  struct LE : Cond_Code {
     LE() { code = "le"; }
   };
-}
+} // namespace aast

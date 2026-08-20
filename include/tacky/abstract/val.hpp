@@ -1,9 +1,7 @@
 #pragma once
 
-namespace tacky
-{
-  struct Val
-  {
+namespace tacky {
+  struct Val {
     virtual ~Val() = default;
   };
-}
+} // namespace tacky
