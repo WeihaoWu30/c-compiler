@@ -1,0 +1,24 @@
+BasedOnStyle: LLVM
+
+# Indentation
+IndentWidth: 2
+NamespaceIndentation: All
+TabWidth: 2
+UseTab: Never
+
+# Braces
+BreakBeforeBraces: Attach
+
+# Pointer/reference placement
+PointerAlignment: Left
+ReferenceAlignment: Left
+
+# Line length
+ColumnLimit: 200
+
+# Short constructs
+AllowShortIfStatementsOnASingleLine: AllIfsAndElse
+AllowShortLoopsOnASingleLine: true
+AllowShortFunctionsOnASingleLine: All
+AllowShortBlocksOnASingleLine: Always
+AllowShortCaseLabelsOnASingleLine: true

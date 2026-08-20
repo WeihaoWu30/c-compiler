@@ -1,9 +1,7 @@
 #pragma once
 
-namespace ast
-{
-    struct Statement
-    {
-        virtual ~Statement() = default;
-    };
-};
+namespace ast {
+  struct Statement {
+    virtual ~Statement() = default;
+  };
+}; // namespace ast

@@ -10,4 +10,4 @@ namespace tacky {
     bool global;
     Static_Variable(std::unique_ptr<Identifier> identifier_, int init_, bool global_) : identifier(std::move(identifier_)), init(init_), global(global_) {}
   };
-}
+} // namespace tacky

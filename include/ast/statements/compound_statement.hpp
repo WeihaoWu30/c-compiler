@@ -3,11 +3,9 @@
 #include "ast/block/block.hpp"
 
 namespace ast {
-   struct Compound_Statement : Statement {
-      Block* block;
-      Compound_Statement(Block *block_) : block(block_){}
-      ~Compound_Statement() {
-         delete block;
-      }
-   };
-}
+  struct Compound_Statement : Statement {
+    Block* block;
+    Compound_Statement(Block* block_) : block(block_) {}
+    ~Compound_Statement() { delete block; }
+  };
+} // namespace ast

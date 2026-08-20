@@ -1,106 +1,52 @@
+#include "compiler/lexer.hpp"
 #include <algorithm>
-#include <stdexcept>
+#include <array>
 #include <fstream>
 #include <iostream>
 #include <list>
 #include <regex>
+#include <stdexcept>
 #include <string>
-#include <array>
 #include <unistd.h>
-#include "compiler/lexer.hpp"
 
-namespace lexer
-{
-  std::array<std::regex, 55> patterns = {std::regex("int\\b"),
-                                         std::regex("void\\b"),
-                                         std::regex("return\\b"),
-                                         std::regex("typedef\\b"),
-                                         std::regex("do\\b"),
-                                         std::regex("while\\b"),
-                                         std::regex("for\\b"),
-                                         std::regex("break\\b"),
-                                         std::regex("continue\\b"),
-                                         std::regex("if\\b"),
-                                         std::regex("else\\b"),
-                                         std::regex("static\\b"),
-                                         std::regex("extern\\b"),
-                                         std::regex("[0-9]+\\b"),
-                                         std::regex("[a-zA-Z_]\\w*\\b"),
-                                         std::regex(","),
-                                         std::regex("\\("),
-                                         std::regex("\\)"),
-                                         std::regex("\\{"),
-                                         std::regex("\\}"),
-                                         std::regex(";"),
-                                         std::regex("--"),
-                                         std::regex("-"),
-                                         std::regex("~"),
-                                         std::regex("\\+"),
-                                         std::regex("\\*"),
-                                         std::regex("/"),
-                                         std::regex("\\%"),
-                                         std::regex("!="),
-                                         std::regex("!"),
-                                         std::regex("&&"),
-                                         std::regex("\\|\\|"),
-                                         std::regex("=="),
-                                         std::regex("<="),
-                                         std::regex(">="),
-                                         std::regex("&"),
-                                         std::regex("\\|"),
-                                         std::regex(">>"),
-                                         std::regex("<<"),
-                                         std::regex("\\^"),
-                                         std::regex("<"),
-                                         std::regex(">"),
-                                         std::regex("="),
-                                         std::regex(":"),
-                                         std::regex("\\?"),
-                                         std::regex("\\+="),
-                                         std::regex("-="),
-                                         std::regex("\\*="),
-                                         std::regex("/="),
-                                         std::regex("%="),
-                                         std::regex("&="),
-                                         std::regex("\\|="),
-                                         std::regex("\\^="),
-                                         std::regex(">>="),
-                                         std::regex("<<=")};
+namespace lexer {
+  std::array<std::regex, 55> patterns = {std::regex("int\\b"),   std::regex("void\\b"),   std::regex("return\\b"), std::regex("typedef\\b"),  std::regex("do\\b"),
+                                         std::regex("while\\b"), std::regex("for\\b"),    std::regex("break\\b"),  std::regex("continue\\b"), std::regex("if\\b"),
+                                         std::regex("else\\b"),  std::regex("static\\b"), std::regex("extern\\b"), std::regex("[0-9]+\\b"),   std::regex("[a-zA-Z_]\\w*\\b"),
+                                         std::regex(","),        std::regex("\\("),       std::regex("\\)"),       std::regex("\\{"),         std::regex("\\}"),
+                                         std::regex(";"),        std::regex("--"),        std::regex("-"),         std::regex("~"),           std::regex("\\+"),
+                                         std::regex("\\*"),      std::regex("/"),         std::regex("\\%"),       std::regex("!="),          std::regex("!"),
+                                         std::regex("&&"),       std::regex("\\|\\|"),    std::regex("=="),        std::regex("<="),          std::regex(">="),
+                                         std::regex("&"),        std::regex("\\|"),       std::regex(">>"),        std::regex("<<"),          std::regex("\\^"),
+                                         std::regex("<"),        std::regex(">"),         std::regex("="),         std::regex(":"),           std::regex("\\?"),
+                                         std::regex("\\+="),     std::regex("-="),        std::regex("\\*="),      std::regex("/="),          std::regex("%="),
+                                         std::regex("&="),       std::regex("\\|="),      std::regex("\\^="),      std::regex(">>="),         std::regex("<<=")};
 
-  std::list<std::string> lex(const std::string &filename)
-  {
+  std::list<std::string> lex(const std::string& filename) {
 
     std::string line;
     std::smatch matches;
     std::list<std::string> tokens;
     std::ifstream istr(filename);
 
-    while (istr >> line)
-    {
-      while (line.size() > 0)
-      {
+    while (istr >> line) {
+      while (line.size() > 0) {
         bool found = false; // Flag To Detect Illegal Expression
         std::string longestMatch;
         long len = 0; // Length of Longest Pattern Match
-        for (unsigned int i = 0; i < patterns.size(); ++i)
-        {
-          if (std::regex_search(line, matches, patterns[i]))
-          {
+        for (unsigned int i = 0; i < patterns.size(); ++i) {
+          if (std::regex_search(line, matches, patterns[i])) {
             long pos = matches.position(0);
-            if (pos == 0 && matches.length(pos) > len)
-            { // Pattern needs to match starting from the first character to be valid
+            if (pos == 0 && matches.length(pos) > len) { // Pattern needs to match starting from the first character to be valid
               longestMatch = matches.str(pos);
               len = matches.length(pos);
               found = true;
             }
           }
         }
-        if (!found)
-        {
+        if (!found) {
           throw std::runtime_error("Illegal Expression: " + line);
-        }
-        else
-        {
+        } else {
           tokens.push_back(longestMatch);
           line = line.substr(len);
         }
@@ -109,4 +55,4 @@ namespace lexer
 
     return tokens;
   }
-}
+} // namespace lexer
