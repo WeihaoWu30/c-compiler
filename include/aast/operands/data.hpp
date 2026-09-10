@@ -9,6 +9,11 @@ namespace aast {
     ~Data() { delete name; }
 
   protected:
+    // add an underscore before the name for macos
+#ifdef __APPLE__
+    void write(std::ostream& ostr) const override { ostr << "_" << name->text << "(%rip)"; }
+#else
     void write(std::ostream& ostr) const override { ostr << name->text << "(%rip)"; }
+#endif
   };
 } // namespace aast

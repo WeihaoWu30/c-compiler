@@ -10,9 +10,9 @@
 #include <unistd.h>
 
 namespace lexer {
-  std::array<std::regex, 55> patterns = {std::regex("int\\b"),   std::regex("void\\b"),   std::regex("return\\b"), std::regex("typedef\\b"),  std::regex("do\\b"),
+  std::array<std::regex, 57> patterns = {std::regex("int\\b"),   std::regex("void\\b"),   std::regex("return\\b"), std::regex("typedef\\b"),  std::regex("do\\b"),
                                          std::regex("while\\b"), std::regex("for\\b"),    std::regex("break\\b"),  std::regex("continue\\b"), std::regex("if\\b"),
-                                         std::regex("else\\b"),  std::regex("static\\b"), std::regex("extern\\b"), std::regex("[0-9]+\\b"),   std::regex("[a-zA-Z_]\\w*\\b"),
+                                         std::regex("else\\b"),  std::regex("static\\b"), std::regex("extern\\b"), std::regex("[0-9]+\\b"),   std::regex("[a-zA-Z_]\\w*\\b"), std::regex("long\\b"),
                                          std::regex(","),        std::regex("\\("),       std::regex("\\)"),       std::regex("\\{"),         std::regex("\\}"),
                                          std::regex(";"),        std::regex("--"),        std::regex("-"),         std::regex("~"),           std::regex("\\+"),
                                          std::regex("\\*"),      std::regex("/"),         std::regex("\\%"),       std::regex("!="),          std::regex("!"),
@@ -20,7 +20,7 @@ namespace lexer {
                                          std::regex("&"),        std::regex("\\|"),       std::regex(">>"),        std::regex("<<"),          std::regex("\\^"),
                                          std::regex("<"),        std::regex(">"),         std::regex("="),         std::regex(":"),           std::regex("\\?"),
                                          std::regex("\\+="),     std::regex("-="),        std::regex("\\*="),      std::regex("/="),          std::regex("%="),
-                                         std::regex("&="),       std::regex("\\|="),      std::regex("\\^="),      std::regex(">>="),         std::regex("<<=")};
+                                         std::regex("&="),       std::regex("\\|="),      std::regex("\\^="),      std::regex(">>="),         std::regex("<<="), std::regex("[0-9]+[lL]\\b")};
 
   std::list<std::string> lex(const std::string& filename) {
 

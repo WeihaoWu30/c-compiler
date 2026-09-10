@@ -9,19 +9,27 @@ namespace aast {
       // visit allows us to call the same function for each type in the variant
       std::visit([&ostr](auto& val) { ostr << val << "\n"; }, top_level);
     }
-    ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
+    // ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
     return ostr;
   }
 
   std::ostream& operator<<(std::ostream& ostr, const Static_Variable& static_variable) {
     if (static_variable.global)
-      ostr << "\t"
-           << ".globl " << *static_variable.name << "\n";
+      ostr << "\t" << ".globl ";
+#ifdef __APPLE__
+    ostr << "_" << *static_variable.name << "\n";
+#else
+    ostr << *static_variable.name << "\n";
+#endif
     ostr << "\t" << (static_variable.init == 0 ? ".bss" : ".data") << "\n";
     ostr << "\t"
          << ".balign 4"
          << "\n";
-    ostr << *static_variable.name << ":\n"; // add an underscore before the name for macos
+#ifdef __APPLE__
+    ostr << "_" << *static_variable.name << ":\n"; // add an underscore before the name for macos
+#else
+    ostr << *static_variable.name << ":\n";
+#endif
     ostr << "\t" << (static_variable.init == 0 ? ".zero 4" : ".long " + std::to_string(static_variable.init)) << "\n";
     return ostr;
   }
@@ -34,9 +42,12 @@ namespace aast {
   std::ostream& operator<<(std::ostream& ostr, const Function& function) {
     // Add underscore before function name for macos
     if (function.global)
-      ostr << "\t"
-           << ".globl " << *function.name << "\n";
+      ostr << "\t" << ".globl ";
+#ifdef __APPLE__
+    ostr << "_" << *function.name << ":\n";
+#else
     ostr << *function.name << ":\n";
+#endif
     ostr << "\t"
          << "pushq\t%rbp\n";
     ostr << "\t"

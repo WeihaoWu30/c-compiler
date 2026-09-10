@@ -5,6 +5,6 @@
 #include <string>
 
 namespace lexer {
-  extern std::array<std::regex, 55> patterns;
+  extern std::array<std::regex, 57> patterns;
   std::list<std::string> lex(const std::string& filename);
 } // namespace lexer
