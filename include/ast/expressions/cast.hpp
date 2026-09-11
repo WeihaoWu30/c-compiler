@@ -1,11 +1,14 @@
 #pragma once
 #include "ast/abstract/expression.hpp"
-#include "ast/types/types.hpp"
+#include "ast/abstract/type.hpp"
+#include <memory>
+#include <utility>
 
 namespace ast {
   struct Cast : Expression {
-    Type* target_type;
     Expression* expression;
-    Cast(Type* target_type_, Expression* expression_) : target_type(target_type_), expression(expression_) {}
+    Cast(std::shared_ptr<Type> type_, Expression* expression_) : expression(expression_) {
+      type = type_;
+    }
   };
 } // namespace ast

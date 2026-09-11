@@ -3,6 +3,7 @@
 #include "ast/declarations/declarations.hpp"
 #include "ast/operators/operators.hpp"
 #include "ast/storage_class/storage_classes.hpp"
+#include "ast/constants/const.hpp"
 #include "ast/top_level/top_level.hpp"
 #include "compiler/tools.hpp"
 #include <array>
@@ -27,6 +28,7 @@ namespace parser {
   uint16_t precedence(const std::string& next_token);
   ast::Expression* parse_conditional_middle(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Expression* parse_expression(std::list<std::string>& tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>>& expressions);
+  ast::Const parse_Constant(std::string& token, long v);
   ast::Expression* parse_factor(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Statement* parse_statement(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Declaration* parse_declaration(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions, std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class>& type_and_storage_class);

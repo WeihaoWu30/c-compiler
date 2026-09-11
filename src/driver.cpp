@@ -15,7 +15,7 @@
 #include <vector>
 
 namespace tools {
-  std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
+  std::unordered_map<std::string, std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
   uint32_t var_counter = 0;
 } // namespace tools
 

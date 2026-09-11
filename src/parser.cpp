@@ -172,11 +172,21 @@ namespace parser {
     } else if (next_token == "(") { // Separating Unary Operators
       tokens.pop_front();
       if (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end()) {
+        std::vector<std::string> types;
         while(!tokens.empty() && (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+          if(type_aliases.count(tokens.front())) {
+            types.push_back(type_aliases[tokens.front()]);
+          } else {
+            types.push_back(tokens.front());
+          }
           tokens.pop_front();
         }
         expect(")", tokens);
-        return parse_factor(tokens, expressions);
+        std::unique_ptr<ast::Type> type = parse_type(types);
+        ast::Expression* exp = parse_factor(tokens, expressions);
+        std::unique_ptr<ast::Cast> cast = std::make_unique<ast::Cast>(std::move(type), exp);
+        expressions.push_back(std::move(cast));
+        return expressions.back().get();
       } else {
         ast::Expression* inner_exp = parse_expression(tokens, 0, expressions);
         expect(")", tokens);
@@ -403,7 +413,11 @@ namespace parser {
     while (!tokens.empty() && tokens.front() != ")") {
       if (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end()) {
         tokens.pop_front();
-        params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
+        if(type_aliases.count(tokens.front())) {
+          params.push_back(std::make_unique<ast::Identifier>(type_aliases[tokens.front()]));
+        } else {
+          params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
+        }
         tokens.pop_front();
         if (tokens.front() == ")") break;
         else {
@@ -442,12 +456,13 @@ namespace parser {
   // this function is a bit different from the textbook, but it allows us to handle the entire parsing process for specifiers in one function
   std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class> parse_type_and_storage_class(std::list<std::string>& tokens) {
     std::vector<std::string> specifier_list;
-    while (!tokens.empty() &&
-           ((type_aliases.count(tokens.front()) || 
-      std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) || 
-      std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())
-    ) {
-      specifier_list.push_back(tokens.front());
+    while (!tokens.empty() && ((type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) ||
+                               std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+      if(type_aliases.count(tokens.front())) {
+        specifier_list.push_back(type_aliases[tokens.front()]);
+      } else {
+        specifier_list.push_back(tokens.front());
+      }
       tokens.pop_front();
     }
     if (tokens.empty()) throw std::runtime_error("Expected identifier after type specifiers, got end of file.");
@@ -455,7 +470,9 @@ namespace parser {
     std::vector<std::string> types;
     std::vector<std::string> storage_classes;
     for (const std::string& specifier : specifier_list) {
-      if (type_aliases.count(specifier) || std::find(type_specifiers.begin(), type_specifiers.end(), specifier) != type_specifiers.end()) {
+      if (type_aliases.count(specifier)) {
+        types.push_back(type_aliases[specifier]);
+      } else if(std::find(type_specifiers.begin(), type_specifiers.end(), specifier) != type_specifiers.end()) {
         types.push_back(specifier);
       } else {
         storage_classes.push_back(specifier);

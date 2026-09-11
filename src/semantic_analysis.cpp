@@ -1,19 +1,40 @@
 #include "compiler/semantic_analysis.hpp"
 #include "ast/ast.hpp"
+#include "ast/operators/unary_operators.hpp"
+#include "ast/types/long.hpp"
 #include "compiler/parser.hpp"
 #include "compiler/tools.hpp"
 #include <regex>
+#include <cstddef>
 
 namespace semantic_analysis {
   std::unordered_map<std::string, MapEntry> identifier_map;
   std::string make_temporary(std::string s) { return s + "." + std::to_string(tools::var_counter++); }
   ast::Identifier* make_label() { return make_label("loop." + std::to_string(tools::var_counter++)); }
-
   ast::Identifier* make_label(std::string label) { return new ast::Identifier(label); }
   std::unordered_map<std::string, MapEntry> copy_identifier_map(std::unordered_map<std::string, MapEntry>& identifier_map) {
     std::unordered_map<std::string, MapEntry> duplicate(identifier_map);
     for (auto& [identifier_name, map_entry] : duplicate) { map_entry.from_current_scope = false; }
     return duplicate;
+  }
+  std::shared_ptr<ast::Type> get_common_type(std::shared_ptr<ast::Type> type1, std::shared_ptr<ast::Type> type2) {
+    if(!type1 || !type2) {
+      return nullptr;
+    }
+    if (typeid(*type1) == typeid(*type2)) {
+      return type1;
+    } else {
+      return std::make_shared<ast::Long>();
+    }
+  }
+  ast::Expression* convert_to(ast::Expression* e, std::shared_ptr<ast::Type> t, std::vector<std::unique_ptr<ast::Expression>>& expressions) {
+    if (e && t) {
+      if (typeid(*e->type) == typeid(*t)) { return e; }
+      std::unique_ptr<ast::Cast> cast_exp = std::make_unique<ast::Cast>(t, e);
+      expressions.push_back(std::move(cast_exp));
+      return expressions.back().get();
+    }
+    return nullptr;
   }
   void resolve_exp(ast::Expression* e, std::unordered_map<std::string, MapEntry>& identifier_map) {
     ast::Assignment* assignment = dynamic_cast<ast::Assignment*>(e);
@@ -325,23 +346,23 @@ namespace semantic_analysis {
     return block;
   }
 
-  void typecheck_declaration(ast::Declaration* declaration, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols, bool is_file_scope) {
+  void typecheck_declaration(ast::Declaration* declaration, bool is_file_scope) {
     ast::Var_Decl* var_decl = dynamic_cast<ast::Var_Decl*>(declaration);
     ast::Fun_Decl* fun_decl = dynamic_cast<ast::Fun_Decl*>(declaration);
     if (var_decl) {
       if (is_file_scope) {
-        typecheck_file_scope_variable_declaration(var_decl, symbols);
+        typecheck_file_scope_variable_declaration(var_decl);
       } else {
-        typecheck_local_variable_declaration(var_decl, symbols);
+        typecheck_local_variable_declaration(var_decl);
       }
     } else if (fun_decl) {
-      typecheck_function_declaration(fun_decl, symbols);
+      typecheck_function_declaration(fun_decl, fun_decl->expressions); // top level function, we pass down its expressions container
     } else {
       throw std::runtime_error("Invalid declaration.");
     }
   }
 
-  void typecheck_file_scope_variable_declaration(ast::Var_Decl* var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols) {
+  void typecheck_file_scope_variable_declaration(ast::Var_Decl* var_decl) {
     ast::Constant* constant = dynamic_cast<ast::Constant*>(var_decl->init);
     ast::Initial_Value initial_value;
     if (constant) {
@@ -358,8 +379,8 @@ namespace semantic_analysis {
 
     bool global = var_decl->storage_class != ast::Storage_Class::STATIC;
 
-    if (auto it = symbols.find(var_decl->name->text); it != symbols.end()) {
-      std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
+    if (auto it = tools::symbols.find(var_decl->name->text); it != tools::symbols.end()) {
+      std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
       ast::Int* old_int_type = dynamic_cast<ast::Int*>(old_decl.first.get());
       if (!old_int_type) { throw std::runtime_error(std::format("Function {} is being redeclared as a variable.", var_decl->name->text)); }
       if (!std::holds_alternative<ast::Static_Attr>(old_decl.second)) { throw std::runtime_error(std::format("Variable {} is declared as local in file scope.", var_decl->name->text)); }
@@ -381,20 +402,20 @@ namespace semantic_analysis {
     }
 
     ast::Identifier_Attr new_decl_attr = ast::Static_Attr(initial_value, global);
-    symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+    tools::symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_shared<ast::Int>(), new_decl_attr));
     // we don't need to typecheck init since it can only be constant or empty as a file scope variable
   }
 
-  void typecheck_local_variable_declaration(ast::Var_Decl* var_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols) {
+  void typecheck_local_variable_declaration(ast::Var_Decl* var_decl) {
     if (var_decl->storage_class == ast::Storage_Class::EXTERN) {
       if (var_decl->init) { throw std::runtime_error(std::format("Local extern variable declaration {} has an initializer.", var_decl->name->text)); }
-      if (auto it = symbols.find(var_decl->name->text); it != symbols.end()) {
-        std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
+      if (auto it = tools::symbols.find(var_decl->name->text); it != tools::symbols.end()) {
+        std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
         ast::Int* old_int_type = dynamic_cast<ast::Int*>(old_decl.first.get());
         if (!old_int_type) { throw std::runtime_error(std::format("Function {} is being redeclared as a variable.", var_decl->name->text)); }
       } else {
         ast::Identifier_Attr new_decl_attr = ast::Static_Attr(ast::No_Initializer(), true);
-        symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+        tools::symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_shared<ast::Int>(), new_decl_attr));
       }
     } else if (var_decl->storage_class == ast::Storage_Class::STATIC) {
       ast::Initial_Value initial_value;
@@ -407,24 +428,25 @@ namespace semantic_analysis {
         throw std::runtime_error(std::format("Local static variable declaration {} has a non-constant initializer.", var_decl->name->text));
       }
       ast::Identifier_Attr new_decl_attr = ast::Static_Attr(initial_value, false);
-      symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
+      tools::symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_shared<ast::Int>(), new_decl_attr));
     } else {
       ast::Identifier_Attr new_decl_attr = ast::Local_Attr();
-      symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_unique<ast::Int>(), new_decl_attr));
-      if (var_decl->init) { typecheck_exp(var_decl->init, symbols); }
+      tools::symbols.insert_or_assign(var_decl->name->text, std::make_pair(std::make_shared<ast::Int>(), new_decl_attr));
+      if (var_decl->init) { typecheck_exp(var_decl->init); }
     }
   }
 
-  void typecheck_function_declaration(ast::Fun_Decl* fun_decl, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols) {
+  // fix this tmmr
+  void typecheck_function_declaration(ast::Fun_Decl* fun_decl, std::vector<std::unique_ptr<ast::Expression>>& function_expressions) {
     std::unique_ptr<ast::Fun_Type> fun_type = std::make_unique<ast::Fun_Type>(fun_decl->params.size());
     ast::Block* body = fun_decl->body;
     bool already_defined = false;
     bool global = fun_decl->storage_class != ast::Storage_Class::STATIC;
 
-    if (auto it = symbols.find(fun_decl->name->text); it != symbols.end()) {
-      std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
+    if (auto it = tools::symbols.find(fun_decl->name->text); it != tools::symbols.end()) {
+      std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>& old_decl = it->second;
       ast::Fun_Type* old_fun_type = dynamic_cast<ast::Fun_Type*>(old_decl.first.get());
-      if (!old_fun_type || old_fun_type->param_count != fun_type->param_count) { throw std::runtime_error("Incompatible function declarations."); }
+      if (!old_fun_type || old_fun_type->param_types.size() != fun_type->param_types.size()) { throw std::runtime_error("Incompatible function declarations."); }
       if (!std::holds_alternative<ast::Fun_Attr>(old_decl.second)) { throw std::runtime_error(std::format("Variable {} is being redeclared as a function.", fun_decl->name->text)); }
       ast::Fun_Attr old_decl_attr = std::get<ast::Fun_Attr>(old_decl.second); // if its a function declaration, it will be a Fun_Attr
       already_defined = old_decl_attr.defined;
@@ -435,134 +457,186 @@ namespace semantic_analysis {
       global = old_decl_attr.global;
     }
     ast::Identifier_Attr fun_attr = ast::Fun_Attr(already_defined || body, global);
-    symbols.insert_or_assign(fun_decl->name->text, std::make_pair(std::move(fun_type), fun_attr));
+    tools::symbols.insert_or_assign(fun_decl->name->text, std::make_pair(std::move(fun_type), fun_attr));
     if (body) {
-      for (auto& param : fun_decl->params) { symbols.emplace(param->text, std::make_pair(std::make_unique<ast::Int>(), ast::Local_Attr())); }
-      typecheck_block(body, symbols, false);
+      for (auto& param : fun_decl->params) { tools::symbols.emplace(param->text, std::make_pair(std::make_shared<ast::Int>(), ast::Local_Attr())); }
+      typecheck_block(body, function_expressions, false);
     }
   }
 
   // add type checking for statements later
-  void typecheck_block(ast::Block* block, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols, bool is_file_scope) {
+  void typecheck_block(ast::Block* block, std::vector<std::unique_ptr<ast::Expression>>& function_expressions, bool is_file_scope, std::shared_ptr<ast::Type> return_type = nullptr) {
     for (auto& item : block->block_items) {
       ast::D* d = dynamic_cast<ast::D*>(item.get());
       if (d) {
         if (dynamic_cast<ast::Var_Decl*>(d->declaration)) {
           if (is_file_scope) {
-            typecheck_file_scope_variable_declaration(dynamic_cast<ast::Var_Decl*>(d->declaration), symbols);
+            typecheck_file_scope_variable_declaration(dynamic_cast<ast::Var_Decl*>(d->declaration));
           } else {
-            typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl*>(d->declaration), symbols);
+            typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl*>(d->declaration));
           }
         } else if (dynamic_cast<ast::Fun_Decl*>(d->declaration)) {
-          typecheck_function_declaration(dynamic_cast<ast::Fun_Decl*>(d->declaration), symbols);
+          // this will always be a declaration without a body so there is no expressions it contains for us to pass down so we pass down the top level function_expressions container
+          typecheck_function_declaration(dynamic_cast<ast::Fun_Decl*>(d->declaration), function_expressions); 
         }
       }
       ast::S* s = dynamic_cast<ast::S*>(item.get());
-      if (s) { typecheck_statement(s->statement, symbols, is_file_scope); }
+      if (s) { typecheck_statement(s->statement, function_expressions, is_file_scope, return_type); }
     }
   }
 
   // add type checking for every other expression type later
-  void typecheck_exp(ast::Expression* e, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols) {
+  void typecheck_exp(ast::Expression* e, std::vector<std::unique_ptr<ast::Expression>>& function_expressions) {
     ast::Function_Call* function_call = dynamic_cast<ast::Function_Call*>(e);
     if (function_call) {
-      auto it = symbols.find(function_call->identifier->text);
-      if (it == symbols.end()) { throw std::runtime_error(std::format("Function {} not defined or declared in scope.", function_call->identifier->text)); }
+      auto it = tools::symbols.find(function_call->identifier->text);
+      if (it == tools::symbols.end()) { throw std::runtime_error(std::format("Function {} not defined or declared in scope.", function_call->identifier->text)); }
       ast::Fun_Type* f_type = dynamic_cast<ast::Fun_Type*>(it->second.first.get());
       if (!f_type) { throw std::runtime_error(std::format("Variable {} used as function name.", function_call->identifier->text)); }
-      if (f_type->param_count != function_call->args.size()) {
-        throw std::runtime_error(std::format("Function {} takes {} arguments, but {} were provided.", function_call->identifier->text, f_type->param_count, function_call->args.size()));
+      if (f_type->param_types.size() != function_call->args.size()) {
+        throw std::runtime_error(std::format("Function {} takes {} arguments, but {} were provided.", function_call->identifier->text, f_type->param_types.size(), function_call->args.size()));
       }
-      for (auto& arg : function_call->args) { typecheck_exp(arg, symbols); }
+      for (std::size_t i{}; i < f_type->param_types.size(); ++i) {
+        typecheck_exp(function_call->args[i], function_expressions);
+        function_call->args[i] = convert_to(function_call->args[i], f_type->param_types[i], function_expressions);
+      }
+      function_call->type = f_type->return_type;
       return;
     }
     ast::Var* var = dynamic_cast<ast::Var*>(e);
     if (var) {
-      if (auto it = symbols.find(var->identifier->text); it != symbols.end()) {
-        std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>& var_type = it->second;
-        ast::Int* int_type = dynamic_cast<ast::Int*>(var_type.first.get());
-        if (!int_type) { throw std::runtime_error(std::format("Function name {} used as variable.", var->identifier->text)); }
+      if (auto it = tools::symbols.find(var->identifier->text); it != tools::symbols.end()) {
+        std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>& var_type = it->second;
+        if (dynamic_cast<ast::Fun_Type*>(var_type.first.get())) { throw std::runtime_error(std::format("Function name {} used as variable.", var->identifier->text)); }
+        var->type = var_type.first;
         return;
       } else {
         throw std::runtime_error(std::format("Variable {} not defined or declared in scope.", var->identifier->text));
       }
     }
+    ast::Constant* constant = dynamic_cast<ast::Constant*>(e);
+    if (constant) {
+      ast::Const constant_type = constant->const_type;
+      if (std::holds_alternative<ast::ConstInt>(constant_type)) {
+        constant->type = std::make_shared<ast::Int>();
+      } else if (std::holds_alternative<ast::ConstLong>(constant_type)) {
+        constant->type = std::make_shared<ast::Long>();
+      } else {
+        throw std::runtime_error("Invalid constant type declared in expression.");
+      }
+      return;
+    }
+    ast::Cast* cast = dynamic_cast<ast::Cast*>(e);
+    if (cast) {
+      typecheck_exp(cast->expression, function_expressions);
+      return;
+    }
     ast::Assignment* assignment = dynamic_cast<ast::Assignment*>(e);
     if (assignment) {
-      typecheck_exp(assignment->lvalue, symbols);
-      typecheck_exp(assignment->exp, symbols);
+      typecheck_exp(assignment->lvalue, function_expressions);
+      typecheck_exp(assignment->exp, function_expressions);
+      assignment->exp = convert_to(assignment->exp, assignment->lvalue->type, function_expressions);
+      assignment->type = assignment->lvalue->type;
       return;
     }
     ast::Binary* binary = dynamic_cast<ast::Binary*>(e);
     if (binary) {
-      typecheck_exp(binary->left, symbols);
-      typecheck_exp(binary->right, symbols);
+      typecheck_exp(binary->left, function_expressions);
+      typecheck_exp(binary->right, function_expressions);
+      if (binary->binary_operator == ast::Binary_Operator::And || binary->binary_operator == ast::Binary_Operator::Or) {
+        binary->type = std::make_shared<ast::Int>();
+        return;
+      }
+      std::shared_ptr<ast::Type> common_type = get_common_type(binary->left->type, binary->right->type);
+      binary->left = convert_to(binary->left, common_type, function_expressions);
+      binary->right = convert_to(binary->right, common_type, function_expressions);
+      if (binary->binary_operator == ast::Binary_Operator::Add ||
+          binary->binary_operator == ast::Binary_Operator::Subtract ||
+          binary->binary_operator == ast::Binary_Operator::Multiply ||
+          binary->binary_operator == ast::Binary_Operator::Divide ||
+          binary->binary_operator == ast::Binary_Operator::Remainder) {
+        binary->type = common_type;
+      } else {
+        binary->type = std::make_shared<ast::Int>();
+      }
       return;
     }
     ast::Compound* compound = dynamic_cast<ast::Compound*>(e);
     if (compound) {
-      typecheck_exp(compound->left, symbols);
-      typecheck_exp(compound->right, symbols);
+      typecheck_exp(compound->left, function_expressions);
+      typecheck_exp(compound->right, function_expressions);
+      compound->right = convert_to(compound->right, compound->left->type, function_expressions);
+      compound->type = compound->left->type;
       return;
     }
     ast::Conditional* conditional = dynamic_cast<ast::Conditional*>(e);
     if (conditional) {
-      typecheck_exp(conditional->condition, symbols);
-      typecheck_exp(conditional->left, symbols);
-      typecheck_exp(conditional->right, symbols);
+      typecheck_exp(conditional->condition, function_expressions);
+      typecheck_exp(conditional->left, function_expressions);
+      typecheck_exp(conditional->right, function_expressions);
+      std::shared_ptr<ast::Type> common_type = get_common_type(conditional->left->type, conditional->right->type);
+      conditional->left = convert_to(conditional->left, common_type, function_expressions);
+      conditional->right = convert_to(conditional->right, common_type, function_expressions);
+      conditional->type = common_type;
       return;
     }
     ast::Unary* unary = dynamic_cast<ast::Unary*>(e);
     if (unary) {
-      typecheck_exp(unary->exp, symbols);
+      typecheck_exp(unary->exp, function_expressions);
+      if (unary->unary_operator == ast::Unary_Operator::Not) {
+        unary->type = std::make_shared<ast::Int>();
+      } else {
+        unary->type = unary->exp->type;
+      }
       return;
     }
   }
 
-  void typecheck_statement(ast::Statement* statement, std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>>& symbols, bool is_file_scope) {
+  void typecheck_statement(ast::Statement* statement, std::vector<std::unique_ptr<ast::Expression>>& function_expressions, bool is_file_scope, std::shared_ptr<ast::Type> return_type = nullptr) {
     ast::Expression_Statement* expression_statement = dynamic_cast<ast::Expression_Statement*>(statement);
     if (expression_statement) {
-      typecheck_exp(expression_statement->exp, symbols);
+      typecheck_exp(expression_statement->exp, function_expressions);
       return;
     }
     ast::Return* return_statement = dynamic_cast<ast::Return*>(statement);
     if (return_statement) {
-      typecheck_exp(return_statement->exp, symbols);
+      typecheck_exp(return_statement->exp, function_expressions);
+      return_statement->exp = convert_to(return_statement->exp, return_type, function_expressions);
       return;
     }
     ast::If* if_statement = dynamic_cast<ast::If*>(statement);
     if (if_statement) {
-      typecheck_exp(if_statement->condition, symbols);
-      typecheck_statement(if_statement->then_statement, symbols, is_file_scope);
-      if (if_statement->else_statement) { typecheck_statement(if_statement->else_statement, symbols, is_file_scope); }
+      typecheck_exp(if_statement->condition, function_expressions);
+      typecheck_statement(if_statement->then_statement, function_expressions, is_file_scope, return_type);
+      if (if_statement->else_statement) { typecheck_statement(if_statement->else_statement, function_expressions, is_file_scope); }
       return;
     }
     ast::Compound_Statement* compound_statement = dynamic_cast<ast::Compound_Statement*>(statement);
     if (compound_statement) {
-      typecheck_block(compound_statement->block, symbols, is_file_scope);
+      typecheck_block(compound_statement->block, function_expressions, is_file_scope, return_type);
       return;
     }
     ast::For* for_statement = dynamic_cast<ast::For*>(statement);
     if (for_statement) {
       ast::Init_Decl* init_decl = dynamic_cast<ast::Init_Decl*>(for_statement->init);
-      if (init_decl) { typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl*>(init_decl->variable_declaration), symbols); }
+      if (init_decl) { typecheck_local_variable_declaration(dynamic_cast<ast::Var_Decl*>(init_decl->variable_declaration)); }
       ast::Init_Exp* init_exp = dynamic_cast<ast::Init_Exp*>(for_statement->init);
-      if (init_exp && init_exp->expression) { typecheck_exp(init_exp->expression, symbols); }
-      if (for_statement->condition) { typecheck_exp(for_statement->condition, symbols); }
-      if (for_statement->post) { typecheck_exp(for_statement->post, symbols); }
-      typecheck_statement(for_statement->body, symbols, is_file_scope);
+      if (init_exp && init_exp->expression) { typecheck_exp(init_exp->expression, function_expressions); }
+      if (for_statement->condition) { typecheck_exp(for_statement->condition, function_expressions); }
+      if (for_statement->post) { typecheck_exp(for_statement->post, function_expressions); }
+      typecheck_statement(for_statement->body, function_expressions, is_file_scope, return_type);
       return;
     }
     ast::While* while_statement = dynamic_cast<ast::While*>(statement);
     if (while_statement) {
-      typecheck_exp(while_statement->condition, symbols);
-      typecheck_statement(while_statement->body, symbols, is_file_scope);
+      typecheck_exp(while_statement->condition, function_expressions);
+      typecheck_statement(while_statement->body, function_expressions, is_file_scope, return_type);
       return;
     }
     ast::DoWhile* do_while_statement = dynamic_cast<ast::DoWhile*>(statement);
     if (do_while_statement) {
-      typecheck_statement(do_while_statement->body, symbols, is_file_scope);
-      typecheck_exp(do_while_statement->condition, symbols);
+      typecheck_statement(do_while_statement->body, function_expressions, is_file_scope, return_type);
+      typecheck_exp(do_while_statement->condition, function_expressions);
       return;
     }
   }
@@ -570,7 +644,7 @@ namespace semantic_analysis {
   void analyze_program(ast::Program* program) {
     for (auto& item : program->declarations) {
       resolve_declaration(item.get(), identifier_map, true);
-      typecheck_declaration(item.get(), tools::symbols, true);
+      typecheck_declaration(item.get(), true);
     }
     identifier_map.clear();
   }
