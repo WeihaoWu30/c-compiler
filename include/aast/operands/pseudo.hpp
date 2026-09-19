@@ -1,13 +1,16 @@
 #pragma once
 #include "aast/abstract/operand.hpp"
 #include "aast/top_level/identifier.hpp"
+#include "aast/registers/reg_type.hpp"
 #include <ostream>
 
 namespace aast {
   struct Pseudo : Operand {
   public:
-    Identifier* identifier;
-    Pseudo(Identifier* identifier_) : identifier(identifier_) {}
+    Identifier* identifier; 
+    Pseudo(Identifier* identifier_, Size size_) : identifier(identifier_) {
+      size = size_;
+    }
     ~Pseudo() { delete identifier; }
 
   protected:

@@ -36,9 +36,9 @@ namespace semantic_analysis {
   ast::Block* label_block(ast::Block* block, ast::Identifier* current_label);
   void typecheck_declaration(ast::Declaration* declaration, bool is_file_scope);
   void typecheck_file_scope_variable_declaration(ast::Var_Decl* var_decl);
-  void typecheck_local_variable_declaration(ast::Var_Decl* var_decl);
+  void typecheck_local_variable_declaration(ast::Var_Decl* var_decl, std::vector<std::unique_ptr<ast::Expression>>* function_expressions = nullptr);
   void typecheck_function_declaration(ast::Fun_Decl* fun_decl, std::vector<std::unique_ptr<ast::Expression>>& function_expressions);
-  void typecheck_block(ast::Block* block, std::vector<std::unique_ptr<ast::Expression>>& function_expressions, bool is_file_scope);
+  void typecheck_block(ast::Block* block, std::vector<std::unique_ptr<ast::Expression>>& function_expressions, bool is_file_scope, std::shared_ptr<ast::Type> return_type = nullptr);
   void typecheck_exp(ast::Expression* e, std::vector<std::unique_ptr<ast::Expression>>& function_expressions);
   void typecheck_statement(ast::Statement* statement, std::vector<std::unique_ptr<ast::Expression>>& function_expressions, bool is_file_scope, std::shared_ptr<ast::Type> return_type = nullptr);
   void analyze_program(ast::Program* program);

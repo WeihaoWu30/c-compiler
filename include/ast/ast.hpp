@@ -6,7 +6,7 @@
 #include "ast/expressions/expressions.hpp"
 #include "ast/for_inits/for_inits.hpp"
 #include "ast/identifier_attrs/identifier_attr.hpp"
-#include "ast/initial_values/initial_value.hpp"
+#include "ast/global_inits/global_inits.hpp"
 #include "ast/operators/operators.hpp"
 #include "ast/statements/statements.hpp"
 #include "ast/storage_class/storage_classes.hpp"

@@ -1,11 +1,14 @@
 #pragma once
 #include "aast/abstract/operand.hpp"
 #include "aast/top_level/identifier.hpp"
+#include "aast/registers/reg_type.hpp"
 namespace aast {
   struct Data : Operand {
   public:
     Identifier* name;
-    Data(Identifier* name_) : name(name_) {}
+    Data(Identifier* name_, Size size_) : name(name_) {
+      size = size_;
+    }
     ~Data() { delete name; }
 
   protected:

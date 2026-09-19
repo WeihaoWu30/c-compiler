@@ -1,5 +1,6 @@
 #pragma once
-#include "ast/initial_values/initial_value.hpp"
+#include "ast/global_inits/global_inits.hpp"
+#include <utility>
 #include <variant>
 
 namespace ast {
@@ -12,9 +13,9 @@ namespace ast {
   };
 
   struct Static_Attr {
-    Initial_Value init;
+    InitialValue init;
     bool global;
-    Static_Attr(Initial_Value init_, bool global_) : init(init_), global(global_) {}
+    Static_Attr(InitialValue init_, bool global_) : init(std::move(init_)), global(global_) {}
   };
 
   using Identifier_Attr = std::variant<Local_Attr, Fun_Attr, Static_Attr>;

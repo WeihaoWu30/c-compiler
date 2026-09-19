@@ -15,9 +15,9 @@ namespace ast {
     Block* body;
     std::unique_ptr<Type> fun_type;
     Storage_Class storage_class;
-    Fun_Decl(Identifier* name_, std::unique_ptr<Type> fun_type_, std::vector<std::unique_ptr<Identifier>> params_, std::vector<std::unique_ptr<ast::Expression>> expressions_ = {},
+    Fun_Decl(Identifier* name_, std::unique_ptr<Type> fun_type_, std::vector<std::unique_ptr<Identifier>> params_,
              Block* body_ = nullptr,
-             Storage_Class storage_class_ = Storage_Class::NONE)
+             Storage_Class storage_class_ = Storage_Class::NONE, std::vector<std::unique_ptr<ast::Expression>> expressions_ = {})
         : params(std::move(params_)), expressions(std::move(expressions_)), body(body_), fun_type(std::move(fun_type_)), storage_class(storage_class_) {
       name = name_; // name owned by declaration
     }

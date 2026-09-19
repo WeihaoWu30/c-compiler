@@ -1,6 +1,6 @@
 #include "compiler/ir_gen.hpp"
 #include "ast/ast.hpp"
-#include "ast/initial_values/initial_value.hpp"
+#include "ast/global_inits/global_inits.hpp"
 #include "compiler/tools.hpp"
 #include "tacky/tacky.hpp"
 #include <cstdint>
@@ -17,6 +17,14 @@ namespace ir_gen {
   tacky::Identifier* make_identifier() {
     std::string tmp_name("tmp." + std::to_string(id_counter++));
     return new tacky::Identifier(tmp_name);
+  }
+
+  tacky::Var* make_temporary_var(std::shared_ptr<ast::Type> type, std::vector<std::unique_ptr<tacky::Val>>& values) {
+    tacky::Identifier* dst_name = make_identifier();
+    tools::frontend_symbols.insert({dst_name->name, {type, ast::Local_Attr()}});
+    std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+    values.push_back(std::move(dst));
+    return dynamic_cast<tacky::Var*>(values.back().get());
   }
 
   // This function converts from a AST Unary operator to TACKY unary operator
@@ -73,20 +81,34 @@ namespace ir_gen {
     if (!e) return nullptr;
     ast::Constant* constant = dynamic_cast<ast::Constant*>(e);
     if (constant) {
-      std::unique_ptr<tacky::Constant> t_constant = std::make_unique<tacky::Constant>(constant->val);
+      std::unique_ptr<tacky::Constant> t_constant = std::make_unique<tacky::Constant>(std::move(constant->const_type));
       values.push_back(std::move(t_constant));
       return values.back().get();
+    }
+    ast::Cast* cast = dynamic_cast<ast::Cast*>(e);
+    if (cast) {
+      tacky::Val* val = emit_tacky(cast->expression, instructions, values);
+      const ast::Type* cast_type = cast->type.get();
+      const ast::Type* exp_type = cast->expression->type.get();
+      if (typeid(*cast_type) == typeid(*exp_type)) return val;
+      tacky::Var* dst = make_temporary_var(cast->type, values);
+      if (dynamic_cast<ast::Long*>(cast->type.get())) {
+        std::unique_ptr<tacky::SignExtend> sign_extend = std::make_unique<tacky::SignExtend>(val, dst);
+        instructions.push_back(std::move(sign_extend));
+      } else {
+        std::unique_ptr<tacky::Truncate> truncate = std::make_unique<tacky::Truncate>(val, dst);
+        instructions.push_back(std::move(truncate));
+      }
+      return dst;
     }
     ast::Unary* unary = dynamic_cast<ast::Unary*>(e);
     if (unary) {
       tacky::Val* src = emit_tacky(unary->exp, instructions, values);
-      tacky::Identifier* dst_name = make_identifier();
-      std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+      tacky::Var* dst = make_temporary_var(unary->type, values);
       tacky::Unary_Operator unary_operator = convert_unop(unary->unary_operator);
-      std::unique_ptr<tacky::Unary> new_unary = std::make_unique<tacky::Unary>(unary_operator, src, dst.get());
+      std::unique_ptr<tacky::Unary> new_unary = std::make_unique<tacky::Unary>(unary_operator, src, dst);
       instructions.push_back(std::move(new_unary));
-      values.push_back(std::move(dst));
-      return values.back().get();
+      return dst;
     }
     ast::Binary* binary = dynamic_cast<ast::Binary*>(e);
     if (binary && binary->binary_operator == ast::Binary_Operator::And) {
@@ -100,7 +122,8 @@ namespace ir_gen {
       std::unique_ptr<tacky::JumpIfZero> right_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(right, right_false_identifier);
       instructions.push_back(std::move(right_jmp_if_zero));
 
-      std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(1);
+      ast::Const const_int_one = ast::ConstInt(1);
+      std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(std::move(const_int_one));
       tacky::Identifier* result_identifier_one = make_identifier();
       std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
       std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
@@ -116,7 +139,8 @@ namespace ir_gen {
       std::unique_ptr<tacky::Label> false_label = std::make_unique<tacky::Label>(false_identifier);
       instructions.push_back(std::move(false_label));
 
-      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
+      ast::Const const_int_zero = ast::ConstInt(0);
+      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(std::move(const_int_zero));
       tacky::Identifier* result_identifier_zero = new tacky::Identifier(result_identifier_one->name);
       std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
       std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
@@ -143,7 +167,8 @@ namespace ir_gen {
       std::unique_ptr<tacky::JumpIfNotZero> right_jmp_if_not_zero = std::make_unique<tacky::JumpIfNotZero>(right, right_true_identifier);
       instructions.push_back(std::move(right_jmp_if_not_zero));
 
-      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
+      ast::Const const_int_zero = ast::ConstInt(0);
+      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(std::move(const_int_zero));
       tacky::Identifier* result_identifier_zero = make_identifier();
       std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
       std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
@@ -159,7 +184,8 @@ namespace ir_gen {
       std::unique_ptr<tacky::Label> true_label = std::make_unique<tacky::Label>(true_identifier);
       instructions.push_back(std::move(true_label));
 
-      std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(1);
+      ast::Const const_int_one = ast::ConstInt(1);
+      std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(std::move(const_int_one));
       tacky::Identifier* result_identifier_one = new tacky::Identifier(result_identifier_zero->name);
       std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
       std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
@@ -178,13 +204,11 @@ namespace ir_gen {
     } else if (binary) {
       tacky::Val* src1 = emit_tacky(binary->left, instructions, values);
       tacky::Val* src2 = emit_tacky(binary->right, instructions, values);
-      tacky::Identifier* dst_name = make_identifier();
-      std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
+      tacky::Var* dst = make_temporary_var(binary->type, values);
       tacky::Binary_Operator binary_operator = convert_to_binop(binary->binary_operator);
-      std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, src1, src2, dst.get());
-      values.push_back(std::move(dst));
+      std::unique_ptr<tacky::Binary> new_binary = std::make_unique<tacky::Binary>(binary_operator, src1, src2, dst);
       instructions.push_back(std::move(new_binary));
-      return values.back().get();
+      return dst;
     }
     ast::Var* var = dynamic_cast<ast::Var*>(e);
     if (var) {
@@ -276,12 +300,10 @@ namespace ir_gen {
       std::vector<tacky::Val*> args;
       for (auto& arg : function_call->args) { args.push_back(emit_tacky(arg, instructions, values)); }
 
-      tacky::Identifier* dst_name = make_identifier();
-      std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-      std::unique_ptr<tacky::Fun_Call> fun_call = std::make_unique<tacky::Fun_Call>(fun_name, std::move(args), dst.get());
+      tacky::Var* dst = make_temporary_var(function_call->type, values);
+      std::unique_ptr<tacky::Fun_Call> fun_call = std::make_unique<tacky::Fun_Call>(fun_name, std::move(args), dst);
       instructions.push_back(std::move(fun_call));
-      values.push_back(std::move(dst));
-      return values.back().get();
+      return dst;
     }
     return nullptr;
   }
@@ -498,7 +520,7 @@ namespace ir_gen {
     ast::Identifier* a_identifier = function_declaration->name;
     std::unique_ptr<tacky::Identifier> t_identifier = std::make_unique<tacky::Identifier>(a_identifier->text);
     bool has_return = false; // variable to track whether a return happens in all paths of function
-    std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>& type_and_attr = tools::symbols.find(function_declaration->name->text)->second;
+    std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>& type_and_attr = tools::frontend_symbols.find(function_declaration->name->text)->second;
     ast::Fun_Attr fun_attr = std::get<ast::Fun_Attr>(type_and_attr.second);
     for (std::unique_ptr<ast::Block_Item>& b : function_declaration->body->block_items) {
       ast::D* d = dynamic_cast<ast::D*>(b.get());
@@ -516,7 +538,8 @@ namespace ir_gen {
 
     // if not all paths gurantee a return, add default Return 0
     if (!has_return) {
-      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(0);
+      ast::Const const_int_zero = ast::ConstInt(0);
+      std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(std::move(const_int_zero));
       std::unique_ptr<tacky::Return> default_return = std::make_unique<tacky::Return>(const_zero.get()); // default case to handle no return statements
       values.push_back(std::move(const_zero));
       instructions.push_back(std::move(default_return));
@@ -525,16 +548,24 @@ namespace ir_gen {
   }
 
   void generate_static_variables(std::vector<tacky::Top_Level>& top_levels) {
-    for (auto& [name, type_and_attr] : tools::symbols) {
+    for (auto& [name, type_and_attr] : tools::frontend_symbols) {
       ast::Identifier_Attr identifier_attr = type_and_attr.second;
       if (holds_alternative<ast::Static_Attr>(identifier_attr)) {
         ast::Static_Attr static_attr = get<ast::Static_Attr>(identifier_attr);
         if (std::holds_alternative<ast::Initial>(static_attr.init)) {
           ast::Initial initial = get<ast::Initial>(static_attr.init);
-          top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), initial.value, static_attr.global));
+          top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), type_and_attr.first, initial.value, static_attr.global));
         } else if (std::holds_alternative<ast::Tentative>(static_attr.init)) {
-          top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), 0, static_attr.global));
-        } else if (std::holds_alternative<ast::No_Initializer>(static_attr.init)) continue; // no initializer, skip
+          if (dynamic_cast<ast::Int*>(type_and_attr.first.get())) {
+            ast::StaticInit int_init = ast::IntInit(0);
+            top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), type_and_attr.first, std::move(int_init), static_attr.global));
+          } else if (dynamic_cast<ast::Long*>(type_and_attr.first.get())) {
+            ast::StaticInit long_init = ast::LongInit(0);
+            top_levels.emplace_back(tacky::Static_Variable(std::make_unique<tacky::Identifier>(name), type_and_attr.first, std::move(long_init), static_attr.global));
+          } else {
+            throw std::runtime_error(std::format("Invalid static variable type: {}", name));
+          }
+        } else if (std::holds_alternative<ast::NoInitializer>(static_attr.init)) continue; // no initializer, skip
       }
     }
   }

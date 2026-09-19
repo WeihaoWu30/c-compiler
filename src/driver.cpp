@@ -14,11 +14,6 @@
 #include <unistd.h>
 #include <vector>
 
-namespace tools {
-  std::unordered_map<std::string, std::pair<std::shared_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
-  uint32_t var_counter = 0;
-} // namespace tools
-
 namespace driver {
   /*
   This function calls the GCC driver to remove comments and trims whitespace in the C file provided.
@@ -95,7 +90,7 @@ int main(int argc, char* argv[]) {
     std::string output_filename;
     for (; i < argc; ++i) {
       std::string filename(argv[i]);
-      tools::symbols.clear(); // clear the symbols map to avoid conflicts between files
+      tools::frontend_symbols.clear(); // clear the symbols map to avoid conflicts between files
       driver::preprocess(filename);
       tokens = lexer::lex(std::string(driver::PREPROCESSED_FILE));
       if (stop == driver::Stage::Lex) continue;

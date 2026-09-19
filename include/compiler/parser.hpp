@@ -13,6 +13,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <vector>
+#include <regex>
 
 namespace parser {
   constexpr std::array<std::string_view, 2> specifiers = {"static", "extern"};
@@ -20,6 +21,7 @@ namespace parser {
   constexpr std::array<std::string_view, 3> unary_operators = {"!", "~", "-"};
   constexpr std::array<std::string_view, 11> compound_operators = {"+=", "-=", "*=", "/=", "%=", "|=", "&=", "^=", ">>=", "<<="};
   constexpr std::array<std::string_view, 20> binary_operators = {"+", "-", "/", "%", "*", "<", "<=", ">", ">=", "==", "!=", "&&", "||", "=", ">>", "<<", "&", "|", "^", "?"};
+  static const std::regex const_regex = std::regex(R"([0-9]+[lL]?)");
   extern std::unordered_map<std::string, std::string> type_aliases; // maps types to typedef aliases
   void expect(std::string expected, std::list<std::string>& tokens);
   ast::Unary_Operator parse_unop(std::list<std::string>& tokens);
@@ -28,7 +30,7 @@ namespace parser {
   uint16_t precedence(const std::string& next_token);
   ast::Expression* parse_conditional_middle(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Expression* parse_expression(std::list<std::string>& tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>>& expressions);
-  ast::Const parse_Constant(std::string& token, long v);
+  ast::Const parse_Constant(std::string& token);
   ast::Expression* parse_factor(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Statement* parse_statement(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions);
   ast::Declaration* parse_declaration(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions, std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class>& type_and_storage_class);

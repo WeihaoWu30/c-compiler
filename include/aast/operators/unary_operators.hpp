@@ -3,9 +3,9 @@
 
 namespace aast {
   struct Neg : Unary_Operator {
-    Neg() { instruction = "negl"; }
+    Neg() { instruction = "neg"; }
   };
   struct Not : Unary_Operator {
-    Not() { instruction = "notl"; }
+    Not() { instruction = "not"; }
   };
 } // namespace aast

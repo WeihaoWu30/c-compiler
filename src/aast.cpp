@@ -9,28 +9,48 @@ namespace aast {
       // visit allows us to call the same function for each type in the variant
       std::visit([&ostr](auto& val) { ostr << val << "\n"; }, top_level);
     }
-    // ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
+#ifndef __APPLE__
+    ostr << ".section .note.GNU-stack,\"\",@progbits" << std::endl; // remove this for macos
+#endif
     return ostr;
   }
 
   std::ostream& operator<<(std::ostream& ostr, const Static_Variable& static_variable) {
-    if (static_variable.global)
-      ostr << "\t" << ".globl ";
+    if (static_variable.global) ostr << "\t" << ".globl ";
+    bool is_bss = false;
+    std::visit([&is_bss](auto& val) {
+      if(val.value == 0) is_bss = true;
+    }, static_variable.init);
 #ifdef __APPLE__
-    ostr << "_" << *static_variable.name << "\n";
-#else
-    ostr << *static_variable.name << "\n";
+    ostr << "_";
 #endif
-    ostr << "\t" << (static_variable.init == 0 ? ".bss" : ".data") << "\n";
+    ostr << *static_variable.name << "\n";
+    ostr << "\t" << (is_bss ? ".bss" : ".data") << "\n";
     ostr << "\t"
-         << ".balign 4"
+         << ".balign "
+         << static_variable.alignment
          << "\n";
 #ifdef __APPLE__
-    ostr << "_" << *static_variable.name << ":\n"; // add an underscore before the name for macos
-#else
-    ostr << *static_variable.name << ":\n";
+    ostr << "_"; // add an underscore before the name for macos
 #endif
-    ostr << "\t" << (static_variable.init == 0 ? ".zero 4" : ".long " + std::to_string(static_variable.init)) << "\n";
+    ostr << *static_variable.name << ":\n";
+    ostr << "\t";
+
+    if (std::holds_alternative<ast::IntInit>(static_variable.init)) {
+      if(is_bss) {
+        ostr << ".zero 4";
+      } else {
+        ostr << ".long " << std::get<ast::IntInit>(static_variable.init).value;
+      }
+    } else {
+      if(is_bss) {
+        ostr << ".zero 8";
+      } else {
+        ostr << ".quad " << std::get<ast::LongInit>(static_variable.init).value;
+      }
+    }
+    
+    ostr << "\n";
     return ostr;
   }
 
@@ -44,10 +64,10 @@ namespace aast {
     if (function.global)
       ostr << "\t" << ".globl ";
 #ifdef __APPLE__
-    ostr << "_" << *function.name << ":\n";
-#else
-    ostr << *function.name << ":\n";
+    ostr << "_";;
 #endif
+    ostr << *function.name << ":\n";
+
     ostr << "\t"
          << "pushq\t%rbp\n";
     ostr << "\t"
