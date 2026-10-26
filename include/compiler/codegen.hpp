@@ -6,13 +6,13 @@
 #include "aast/operators/operators.hpp"
 #include "aast/top_level/program.hpp"
 #include "tacky/abstract/abstract.hpp"
+#include "tacky/abstract/val.hpp"
 #include "tacky/operators/operators.hpp"
 #include "tacky/top_level/top_level.hpp"
 #include <array>
 #include <cstddef>
 #include <list>
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
 namespace codegen {
@@ -35,6 +35,8 @@ namespace codegen {
       tacky::Binary_Operator::LessOrEqual, tacky::Binary_Operator::GreaterThan, tacky::Binary_Operator::GreaterOrEqual,
   };
   constexpr std::size_t MAX_PARAMS_IN_REGISTERS = 6;
+  aast::Size get_size_based_on_name(const std::string& name);
+  aast::Size get_size_based_on_val(tacky::Val* val);
   aast::Operand* generate_operand(tacky::Val* t_val, std::vector<std::unique_ptr<aast::Operand>>& operands);
   aast::Unary_Operator* generate_unary_operators(tacky::Unary_Operator unary_operator);
   aast::Binary_Operator* generate_basic_binary_operators(tacky::Binary_Operator binary_operator);
@@ -47,6 +49,8 @@ namespace codegen {
   void generate_jmp(tacky::Instruction* instruction, std::list<std::unique_ptr<aast::Instruction>>& assembly_instructions);
   void generate_label(tacky::Instruction* instruction, std::list<std::unique_ptr<aast::Instruction>>& assembly_instructions);
   void generate_copy(tacky::Instruction* instruction, std::list<std::unique_ptr<aast::Instruction>>& assembly_instructions, std::vector<std::unique_ptr<aast::Operand>>& operands);
+  void generate_sign_extend(tacky::Instruction* instruction, std::list<std::unique_ptr<aast::Instruction>>& assembly_instructions, std::vector<std::unique_ptr<aast::Operand>>& operands);
+  void generate_truncate(tacky::Instruction* instruction, std::list<std::unique_ptr<aast::Instruction>>& assembly_instructions, std::vector<std::unique_ptr<aast::Operand>>& operands);
   void generate_instructions(std::vector<std::unique_ptr<tacky::Instruction>>& body, std::list<std::unique_ptr<aast::Instruction>>& instructions,
                              std::vector<std::unique_ptr<aast::Operand>>& operands);
   aast::Stack* replace_pseudo(aast::Pseudo* pseudo, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager);
@@ -64,6 +68,8 @@ namespace codegen {
   void fix_cmp(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands,
                StackManager& stack_manager);
   void fix_set(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager);
+  void fix_movsx(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager);
+  void fix_push(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager);
   void copy_parameters(std::vector<std::unique_ptr<tacky::Identifier>>& params, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands);
   void compiler_pass(StackManager& stack_manager, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands);
   aast::Function generate_function(tacky::Function* func);

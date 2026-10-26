@@ -9,3 +9,5 @@
 #include "tacky/instructions/label.hpp"
 #include "tacky/instructions/return.hpp"
 #include "tacky/instructions/unary.hpp"
+#include "tacky/instructions/sign_extend.hpp"
+#include "tacky/instructions/truncate.hpp"

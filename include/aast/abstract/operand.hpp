@@ -1,9 +1,11 @@
 #pragma once
 #include <ostream>
+#include "aast/registers/reg_type.hpp"
 
 namespace aast {
   struct Operand {
   public:
+    Size size;
     virtual ~Operand() = default;
 
   protected:

@@ -3,38 +3,38 @@
 
 namespace aast {
   struct Add : Binary_Operator {
-    Add() { instruction = "addl"; }
+    Add() { instruction = "add"; }
   };
 
   struct Sub : Binary_Operator {
-    Sub() { instruction = "subl"; }
+    Sub() { instruction = "sub"; }
   };
 
   struct Mult : Binary_Operator {
-    Mult() { instruction = "imull"; }
+    Mult() { instruction = "imul"; }
   };
 
   struct And : Binary_Operator {
-    And() { instruction = "andl"; }
+    And() { instruction = "and"; }
   };
 
   struct Or : Binary_Operator {
-    Or() { instruction = "orl"; }
+    Or() { instruction = "or"; }
   };
 
   struct Xor : Binary_Operator {
-    Xor() { instruction = "xorl"; }
+    Xor() { instruction = "xor"; }
   };
 
   struct Shr : Binary_Operator {
-    Shr() { instruction = "shrl"; }
+    Shr() { instruction = "shr"; }
   };
 
   struct Shl : Binary_Operator {
-    Shl() { instruction = "shll"; }
+    Shl() { instruction = "shl"; }
   };
 
   struct Sar : Binary_Operator {
-    Sar() { instruction = "sarl"; }
+    Sar() { instruction = "sar"; }
   };
 } // namespace aast

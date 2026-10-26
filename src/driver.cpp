@@ -1,7 +1,25 @@
-#include "aast/top_level/program.hpp"
+#ifndef COMPILER_STAGE
+#define COMPILER_STAGE 5
+#endif
+
+#include "compiler/driver.hpp"
+#include "compiler/lexer.hpp"
+#if COMPILER_STAGE >= 2
 #include "ast/top_level/program.hpp"
-#include "compiler/compiler.hpp"
+#include "compiler/parser.hpp"
+#include "compiler/tools.hpp"
+#endif
+#if COMPILER_STAGE >= 3
+#include "compiler/semantic_analysis.hpp"
+#endif
+#if COMPILER_STAGE >= 4
+#include "compiler/ir_gen.hpp"
 #include "tacky/top_level/program.hpp"
+#endif
+#if COMPILER_STAGE >= 5
+#include "aast/top_level/program.hpp"
+#include "compiler/codegen.hpp"
+#endif
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -13,11 +31,6 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <vector>
-
-namespace tools {
-  std::unordered_map<std::string, std::pair<std::unique_ptr<ast::Type>, ast::Identifier_Attr>> symbols; // maps variable names to types
-  uint32_t var_counter = 0;
-} // namespace tools
 
 namespace driver {
   /*
@@ -73,7 +86,7 @@ int main(int argc, char* argv[]) {
   if (argc < 2) { throw std::runtime_error("Missing Filename."); }
   try {
     driver::Stage stop = driver::Stage::Full;
-    bool is_binary = true;
+    [[maybe_unused]] bool is_binary = true;
     int i = 1;
     for (; i < argc; ++i) {
       std::string arg(argv[i]);
@@ -87,31 +100,48 @@ int main(int argc, char* argv[]) {
     }
 
     std::list<std::string> tokens;
+#if COMPILER_STAGE >= 2
     std::unique_ptr<ast::Program> program;
+#endif
+#if COMPILER_STAGE >= 4
     std::unique_ptr<tacky::Program> tacky_program;
+#endif
+#if COMPILER_STAGE >= 5
     std::unique_ptr<aast::Program> assembly_program;
     std::ofstream ostr;
     std::vector<std::string> object_filenames;
     std::string output_filename;
+#endif
     for (; i < argc; ++i) {
       std::string filename(argv[i]);
-      tools::symbols.clear(); // clear the symbols map to avoid conflicts between files
+#if COMPILER_STAGE >= 2
+      tools::frontend_symbols.clear(); // clear the symbols map to avoid conflicts between files
+#endif
       driver::preprocess(filename);
       tokens = lexer::lex(std::string(driver::PREPROCESSED_FILE));
       if (stop == driver::Stage::Lex) continue;
 
+#if COMPILER_STAGE >= 2
       program.reset(parser::parse(tokens));
       if (stop == driver::Stage::Parse) continue;
+#endif
 
+#if COMPILER_STAGE >= 3
       semantic_analysis::analyze_program(program.get());
       if (stop == driver::Stage::Validate) continue;
+#endif
 
+#if COMPILER_STAGE >= 4
       tacky_program.reset(ir_gen::generate_tacky(program.get()));
       if (stop == driver::Stage::Tacky) continue;
+#endif
 
+#if COMPILER_STAGE >= 5
       assembly_program.reset(codegen::generate_top_level(tacky_program.get()));
       if (stop == driver::Stage::Codegen) continue;
+#endif
 
+#if COMPILER_STAGE >= 6
       ostr.open(driver::ASSEMBLY_FILE.data());
       if (!ostr) { throw std::runtime_error("Failed To Open Assembly File"); }
       ostr << *assembly_program; // Writing Assembly To File using Output Stream Extraction Operator Overloading
@@ -122,10 +152,10 @@ int main(int argc, char* argv[]) {
       filename += ".o";
       driver::convert_to_object(filename);
       object_filenames.push_back(filename);
+#endif
     }
-
+#if COMPILER_STAGE >= 6
     if (stop != driver::Stage::Full) { return EXIT_SUCCESS; }
-
     std::vector<char*> object_filenames_as_args;
     for (const std::string& filename : object_filenames) object_filenames_as_args.push_back(const_cast<char*>(filename.c_str()));
 
@@ -140,6 +170,7 @@ int main(int argc, char* argv[]) {
     }
 #ifndef DEBUG
     driver::cleanup(is_binary, object_filenames_as_args);
+#endif
 #endif
     return EXIT_SUCCESS;
   } catch (const std::exception& e) {

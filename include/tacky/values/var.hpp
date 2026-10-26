@@ -6,6 +6,7 @@ namespace tacky {
   struct Var : Val {
     Identifier* identifier;
     Var(Identifier* identifier_) : identifier(identifier_) {}
+    Var(Var* var) : identifier(var->identifier) {}
     ~Var() { delete identifier; }
   };
 } // namespace tacky

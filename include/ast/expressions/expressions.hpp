@@ -7,3 +7,4 @@
 #include "ast/expressions/function_call.hpp"
 #include "ast/expressions/unary.hpp"
 #include "ast/expressions/var.hpp"
+#include "ast/expressions/cast.hpp"

@@ -14,3 +14,4 @@
 #include "aast/instructions/ret.hpp"
 #include "aast/instructions/setcc.hpp"
 #include "aast/instructions/unary.hpp"
+#include "aast/instructions/movsx.hpp"

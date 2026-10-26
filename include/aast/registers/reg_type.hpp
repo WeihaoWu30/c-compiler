@@ -2,7 +2,7 @@
 #include <string>
 
 namespace aast {
-  enum class RegType { AX, CX, DX, DI, SI, R8, R9, R10, R11 };
+  enum class RegType { AX, CX, DX, DI, SI, R8, R9, R10, R11, SP };
 
   enum class Size { BYTE, DWORD, QWORD };
 
@@ -69,6 +69,13 @@ namespace aast {
       case Size::BYTE: return "%r11b";
       case Size::DWORD: return "%r11d";
       case Size::QWORD: return "%r11";
+      }
+      break;
+    case RegType::SP:
+      switch (size_) {
+      case Size::BYTE: return "%spl";
+      case Size::DWORD: return "%esp";
+      case Size::QWORD: return "%rsp";
       }
       break;
     }

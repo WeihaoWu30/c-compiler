@@ -1,12 +1,13 @@
 #include "compiler/parser.hpp"
 #include "ast/ast.hpp"
-#include "ast/identifier_attrs/identifier_attr.hpp"
-#include "ast/storage_class/storage_classes.hpp"
+#include "ast/constants/const.hpp"
 #include "compiler/tools.hpp"
 #include <algorithm>
 #include <array>
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <format>
-#include <iostream>
 #include <iterator>
 #include <memory>
 #include <regex>
@@ -14,7 +15,6 @@
 #include <string>
 #include <unordered_map>
 #include <utility>
-#include <variant>
 #include <vector>
 
 // This File is meant to convert the tokens into Abstract Syntax Tree nodes
@@ -23,10 +23,20 @@ namespace parser {
   // For Parsing Expressions
   std::unordered_map<std::string, std::string> type_aliases; // maps types to typedef aliases
 
+  // throws an error if tokens is empty
+  void require_token(std::list<std::string>& tokens, const std::string& expected) {
+    if (tokens.empty()) { throw std::runtime_error(std::format("Expected {} but found nothing.", expected)); }
+  }
+
+  // safely returns the next token without removing it from the list
+  std::string& peek(std::list<std::string>& tokens, const std::string& expected) {
+    require_token(tokens, expected);
+    return tokens.front();
+  }
+
   // This Function Matches A Token Against Legal Syntax
   void expect(std::string expected, std::list<std::string>& tokens) {
-    if (tokens.empty()) { throw std::runtime_error(std::format("Expected {}, but found nothing.", expected)); }
-    std::string actual(tokens.front());
+    std::string actual = peek(tokens, expected);
     if (actual == expected) {
       tokens.pop_front();
     } else {
@@ -113,8 +123,7 @@ namespace parser {
   // This function groups up expressions and orders them by precedence to create a recursive branch of Binary AST nodes
   ast::Expression* parse_expression(std::list<std::string>& tokens, uint16_t min_prec, std::vector<std::unique_ptr<ast::Expression>>& expressions) {
     ast::Expression* left = parse_factor(tokens, expressions);
-    if (tokens.empty()) { throw std::runtime_error("Expected ;, but found nothing."); }
-    std::string next_token(tokens.front());
+    std::string next_token = peek(tokens, ";");
     ast::Expression* right;
     while ((std::find(binary_operators.begin(), binary_operators.end(), next_token) != binary_operators.end() ||
             std::find(compound_operators.begin(), compound_operators.end(), next_token) != compound_operators.end()) &&
@@ -141,21 +150,35 @@ namespace parser {
         expressions.push_back(std::move(unique_left));
       }
       left = expressions.back().get();
-      next_token = tokens.front();
+      next_token = peek(tokens, "operator");
     }
 
     return left;
   }
 
+  ast::Const parse_Constant(std::string& token) {
+    std::string value_string(token);
+    bool is_long = false;
+    if (std::find(token.begin(), token.end(), 'l') != token.end() || std::find(token.begin(), token.end(), 'L') != token.end()) {
+      value_string.pop_back();
+      is_long = true;
+    }
+    errno = 0;
+    char* endptr;
+    long v = std::strtol(value_string.c_str(), &endptr, 10);
+    if (*endptr != '\0') { throw std::runtime_error(std::format("Invalid constant: {}", token)); }
+    if (errno == ERANGE) { throw std::runtime_error(std::format("Constant {} is too large to represent as an long or int.", token)); } // range error
+    if (!is_long && v <= INT_MAX && v >= INT_MIN) return ast::ConstInt(v);
+    return ast::ConstLong(v);
+  }
+
   // This recursive function Establishes Expression Nodes
   ast::Expression* parse_factor(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions) {
-    if (tokens.empty()) { throw std::runtime_error("Expected expression after operator, but found nothing."); }
-    std::string next_token(tokens.front());
-    char* endptr;
-    long value = std::strtol(next_token.c_str(), &endptr, 10); // parses decimal integers
-    if (*endptr == '\0')                                       // valid integer
+    std::string next_token = peek(tokens, "expression after operator");
+    if (std::regex_match(next_token, const_regex)) // valid integer
     {
-      std::unique_ptr<ast::Constant> constant = std::make_unique<ast::Constant>(value);
+      ast::Const const_type = parse_Constant(next_token);
+      std::unique_ptr<ast::Constant> constant = std::make_unique<ast::Constant>(std::move(const_type));
       expressions.push_back(std::move(constant));
       tokens.pop_front();
       return expressions.back().get();
@@ -167,16 +190,35 @@ namespace parser {
       return expressions.back().get();
     } else if (next_token == "(") { // Separating Unary Operators
       tokens.pop_front();
-      ast::Expression* inner_exp = parse_expression(tokens, 0, expressions);
-      expect(")", tokens);
-      return inner_exp;
-    } else if ( // find std method that combines these
-        std::find(binary_operators.begin(), binary_operators.end(), next_token) == binary_operators.end() &&
-        std::find(compound_operators.begin(), compound_operators.end(), next_token) == compound_operators.end() &&
-        std::find(unary_operators.begin(), unary_operators.end(), next_token) == unary_operators.end() && std::find(specifiers.begin(), specifiers.end(), next_token) == specifiers.end()) {
+      std::string peeked_token = peek(tokens, "type specifier or type alias");
+      if (type_aliases.count(peeked_token) || std::find(type_specifiers.begin(), type_specifiers.end(), peeked_token) != type_specifiers.end()) {
+        std::vector<std::string> types;
+        while (!tokens.empty() && (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+          if (type_aliases.count(tokens.front())) {
+            types.push_back(type_aliases[tokens.front()]);
+          } else {
+            types.push_back(tokens.front());
+          }
+          tokens.pop_front();
+        }
+        expect(")", tokens);
+        std::unique_ptr<ast::Type> type = parse_type(types);
+        ast::Expression* exp = parse_factor(tokens, expressions);
+        std::unique_ptr<ast::Cast> cast = std::make_unique<ast::Cast>(std::move(type), exp);
+        expressions.push_back(std::move(cast));
+        return expressions.back().get();
+      } else {
+        ast::Expression* inner_exp = parse_expression(tokens, 0, expressions);
+        expect(")", tokens);
+        return inner_exp;
+      }
+    } else if (std::find(binary_operators.begin(), binary_operators.end(), next_token) == binary_operators.end() &&
+               std::find(compound_operators.begin(), compound_operators.end(), next_token) == compound_operators.end() &&
+               std::find(unary_operators.begin(), unary_operators.end(), next_token) == unary_operators.end() && std::find(specifiers.begin(), specifiers.end(), next_token) == specifiers.end() &&
+               std::find(type_specifiers.begin(), type_specifiers.end(), next_token) == type_specifiers.end()) {
       ast::Identifier* name = new ast::Identifier(next_token);
       tokens.pop_front();
-      if (tokens.front() == "(") {
+      if (!tokens.empty() && tokens.front() == "(") {
         tokens.pop_front();
         std::vector<ast::Expression*> arguemnt_list;
         while (!tokens.empty() && tokens.front() != ")") {
@@ -203,20 +245,22 @@ namespace parser {
 
   // This function handles statements
   ast::Statement* parse_statement(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions) {
-    if (tokens.front() == "return") {
+    std::string next_token = peek(tokens, "statement");
+    if (next_token == "return") {
       expect("return", tokens);
       ast::Expression* return_val = parse_expression(tokens, 0, expressions);
       expect(";", tokens);
       ast::Return* ret = new ast::Return(return_val);
       return ret;
-    } else if (tokens.front() == "if") {
+    } else if (next_token == "if") {
       tokens.pop_front();
       expect("(", tokens);
       ast::Expression* condition = parse_expression(tokens, 0, expressions);
       expect(")", tokens);
       ast::Statement* body = parse_statement(tokens, expressions);
       ast::If* if_statement;
-      if (tokens.front() == "else") {
+      std::string peeked_token = peek(tokens, "else");
+      if (peeked_token == "else") {
         tokens.pop_front();
         ast::Statement* else_block = parse_statement(tokens, expressions);
         if_statement = new ast::If(condition, body, else_block);
@@ -224,19 +268,19 @@ namespace parser {
         if_statement = new ast::If(condition, body);
       }
       return if_statement;
-    } else if (tokens.front() == "break") {
+    } else if (next_token == "break") {
       tokens.pop_front();
       ast::Identifier* label = new ast::Identifier("67"); // dummy value since variables cant contian only numbers
       ast::Break* break_statement = new ast::Break(label);
       expect(";", tokens);
       return break_statement;
-    } else if (tokens.front() == "continue") {
+    } else if (next_token == "continue") {
       tokens.pop_front();
       ast::Identifier* label = new ast::Identifier("67"); // dummy value since variables cant contian only numbers
       ast::Continue* continue_statement = new ast::Continue(label);
       expect(";", tokens);
       return continue_statement;
-    } else if (tokens.front() == "while") {
+    } else if (next_token == "while") {
       tokens.pop_front();
       expect("(", tokens);
       ast::Expression* condition = parse_expression(tokens, 0, expressions);
@@ -245,7 +289,7 @@ namespace parser {
       ast::Identifier* label = new ast::Identifier("67"); // dummy value since variables cant contian only numbers
       ast::While* while_statement = new ast::While(condition, body, label);
       return while_statement;
-    } else if (tokens.front() == "do") {
+    } else if (next_token == "do") {
       tokens.pop_front();
       ast::Statement* body = parse_statement(tokens, expressions);
       expect("while", tokens);
@@ -256,12 +300,14 @@ namespace parser {
       ast::Identifier* label = new ast::Identifier("67"); // dummy value since variables cant contian only numbers
       ast::DoWhile* do_while_statement = new ast::DoWhile(body, condition, label);
       return do_while_statement;
-    } else if (tokens.front() == "for") {
+    } else if (next_token == "for") {
       tokens.pop_front();
       expect("(", tokens);
       ast::For_Init* init;
-      if (type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) {
-        std::pair<ast::Type*, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
+      // we will catch invalid type specifiers at semantic analysis
+      if (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end() ||
+          std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) {
+        std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
         ast::Var_Decl* variable_declaration = dynamic_cast<ast::Var_Decl*>(parse_declaration(tokens, expressions, type_and_storage_class));
         if (!variable_declaration) { throw std::runtime_error("Expected variable declaration in for loop."); }
         init = new ast::Init_Decl(variable_declaration);
@@ -287,11 +333,11 @@ namespace parser {
       ast::Identifier* label = new ast::Identifier("67"); // dummy value since variables cant contian only numbers
       ast::For* for_statement = new ast::For(init, body, label, condition, post);
       return for_statement;
-    } else if (tokens.front() == ";") {
+    } else if (next_token == ";") {
       expect(";", tokens);
       ast::Null* null_statement = new ast::Null();
       return null_statement;
-    } else if (tokens.front() == "{") {
+    } else if (next_token == "{") {
       expect("{", tokens);
       std::vector<std::unique_ptr<ast::Block_Item>> block_items;
       while (tokens.front() != "}") { block_items.push_back(parse_block_item(tokens, expressions)); }
@@ -308,7 +354,8 @@ namespace parser {
     return nullptr;
   }
 
-  ast::Declaration* parse_declaration(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions, std::pair<ast::Type*, ast::Storage_Class>& type_and_storage_class) {
+  ast::Declaration* parse_declaration(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions,
+                                      std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class>& type_and_storage_class) {
     ast::Identifier* identifier;
     ast::Declaration* declaration;
     char* endptr;
@@ -324,15 +371,15 @@ namespace parser {
     if (next_token == "=") {
       expect("=", tokens);
       ast::Expression* exp = parse_expression(tokens, 0, expressions);
-      declaration = new ast::Var_Decl(identifier, exp, type_and_storage_class.second);
+      declaration = new ast::Var_Decl(identifier, std::move(type_and_storage_class.first), exp, type_and_storage_class.second);
       expect(";", tokens);
     } else if (next_token == ";") {
-      declaration = new ast::Var_Decl(identifier, nullptr, type_and_storage_class.second);
+      declaration = new ast::Var_Decl(identifier, std::move(type_and_storage_class.first), nullptr, type_and_storage_class.second);
       expect(";", tokens);
     } else if (next_token == "(") // resolve_function will handle whether or not this is allowed to contain a definition
     {
       expect("(", tokens);
-      std::vector<std::unique_ptr<ast::Identifier>> param_list;
+      std::vector<std::pair<std::unique_ptr<ast::Identifier>, std::shared_ptr<ast::Type>>> param_list;
       parse_parameters(tokens, param_list, identifier->text);
       ast::Block* body = nullptr;
       if (tokens.front() == "{") // Function declaration with a definition
@@ -349,18 +396,24 @@ namespace parser {
       {
         expect(";", tokens);
       }
-      declaration = new ast::Fun_Decl(identifier, std::move(param_list), std::move(expressions), body, type_and_storage_class.second);
+      if (body) {
+        declaration = new ast::Fun_Decl(identifier, std::move(type_and_storage_class.first), std::move(param_list), body, type_and_storage_class.second, std::move(expressions));
+      } else {
+        declaration = new ast::Fun_Decl(identifier, std::move(type_and_storage_class.first), std::move(param_list), nullptr, type_and_storage_class.second);
+      }
     } else {
+      delete identifier;
       throw std::runtime_error("Not a valid declaration.");
     }
     return declaration;
   }
-
   std::unique_ptr<ast::Block_Item> parse_block_item(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Expression>>& expressions) {
     // handling typedef
     if (tokens.front() == "typedef") {
       tokens.pop_front();
-      if (!type_aliases.count(tokens.front())) { throw std::runtime_error(std::format("{} is not a valid type.", tokens.front())); }
+      if (!type_aliases.count(tokens.front()) && std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) == type_specifiers.end()) {
+        throw std::runtime_error(std::format("{} is not a valid type.", tokens.front()));
+      }
 
       std::string data_type(tokens.front());
       if (type_aliases.count(data_type)) { // handle nested typedef
@@ -372,11 +425,14 @@ namespace parser {
       tokens.pop_front();
       type_aliases[alias] = data_type;
 
+      expect(";", tokens);
+
       std::unique_ptr<ast::S> s = std::make_unique<ast::S>(new ast::Null());
       return s;
     }
-    if (type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) {
-      std::pair<ast::Type*, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
+    if (type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end() ||
+        std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end()) {
+      std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
       std::unique_ptr<ast::D> d = std::make_unique<ast::D>(parse_declaration(tokens, expressions, type_and_storage_class));
       // delete declaration;
       return d;
@@ -387,18 +443,27 @@ namespace parser {
     }
   }
 
-  void parse_parameters(std::list<std::string>& tokens, std::vector<std::unique_ptr<ast::Identifier>>& params, const std::string& func_name) {
+  void parse_parameters(std::list<std::string>& tokens, std::vector<std::pair<std::unique_ptr<ast::Identifier>, std::shared_ptr<ast::Type>>>& params, const std::string& func_name) {
     while (!tokens.empty() && tokens.front() != ")") {
-      if (type_aliases.count(tokens.front()) || "int" == tokens.front()) {
-        tokens.pop_front();
-        params.push_back(std::make_unique<ast::Identifier>(tokens.front()));
-        tokens.pop_front();
-        if (tokens.front() == ")") break;
-        else {
-          expect(",", tokens);
-          if (!tokens.empty() && !(type_aliases.count(tokens.front()) || tokens.front() == "int")) {
-            throw std::runtime_error(std::format("Trailing comma in parameter list of function {}.", func_name));
+      if (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end()) {
+        std::vector<std::string> specifier_list;
+        while (!tokens.empty() && (type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+          if (type_aliases.count(tokens.front())) {
+            specifier_list.push_back(type_aliases[tokens.front()]);
+          } else {
+            specifier_list.push_back(tokens.front());
           }
+          tokens.pop_front();
+        }
+        std::shared_ptr<ast::Type> type = parse_type(specifier_list);
+        std::string param_name = peek(tokens, "identifier");
+        params.emplace_back(std::make_unique<ast::Identifier>(param_name), std::move(type));
+        tokens.pop_front();
+        require_token(tokens, ", or ) after parameter name");
+        if (tokens.front() == ")") break;
+        expect(",", tokens);
+        if (!tokens.empty() && !(type_aliases.count(tokens.front()) || std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+          throw std::runtime_error(std::format("Trailing comma in parameter list of function {}.", func_name));
         }
       } else if (tokens.front() == "void") {
         tokens.pop_front();
@@ -412,38 +477,56 @@ namespace parser {
     expect(")", tokens);
   }
 
+  std::unique_ptr<ast::Type> parse_type(std::vector<std::string>& specifier_list) {
+    if (std::find(specifier_list.begin(), specifier_list.end(), "int") != specifier_list.end()) {
+      if (std::find(specifier_list.begin(), specifier_list.end(), "long") != specifier_list.end()) {
+        return std::make_unique<ast::Long>();
+      } else {
+        return std::make_unique<ast::Int>();
+      }
+    } else if (std::find(specifier_list.begin(), specifier_list.end(), "long") != specifier_list.end()) {
+      return std::make_unique<ast::Long>();
+    } else {
+      throw std::runtime_error("Invalid Type Specifier");
+    }
+    return nullptr;
+  }
+
   // this function is a bit different from the textbook, but it allows us to handle the entire parsing process for specifiers in one function
-  std::pair<ast::Type*, ast::Storage_Class> parse_type_and_storage_class(std::list<std::string>& tokens) {
+  std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class> parse_type_and_storage_class(std::list<std::string>& tokens) {
     std::vector<std::string> specifier_list;
-    while (!tokens.empty() && (type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end())) {
-      specifier_list.push_back(tokens.front());
+    while (!tokens.empty() && ((type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end()) ||
+                               std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
+      if (type_aliases.count(tokens.front())) {
+        specifier_list.push_back(type_aliases[tokens.front()]);
+      } else {
+        specifier_list.push_back(tokens.front());
+      }
       tokens.pop_front();
     }
-    if (tokens.empty()) throw std::runtime_error("Expected identifier after type specifiers, got end of file.");
+    // we only check for int because long long is a valid type specifier but int int is not
+    if (std::count(specifier_list.begin(), specifier_list.end(), "int") > 1) { throw std::runtime_error("int is declared multiple times."); }
+    require_token(tokens, "identifier after type specifiers");
 
     std::vector<std::string> types;
     std::vector<std::string> storage_classes;
     for (const std::string& specifier : specifier_list) {
-      if (type_aliases.count(specifier) || specifier == "int") {
+      if (type_aliases.count(specifier)) {
+        types.push_back(type_aliases[specifier]);
+      } else if (std::find(type_specifiers.begin(), type_specifiers.end(), specifier) != type_specifiers.end()) {
         types.push_back(specifier);
       } else {
         storage_classes.push_back(specifier);
       }
     }
 
-    if (types.size() != 1) throw std::runtime_error("Invalid Type Specifier");
+    if (types.size() < 1) throw std::runtime_error("Invalid Type Specifier");
     if (storage_classes.size() > 1) throw std::runtime_error("Invalid Storage Class");
 
-    ast::Int* type = nullptr; // for now, this is just a placeholder
-    ast::Storage_Class storage_class;
+    std::unique_ptr<ast::Type> type = parse_type(types);
+    ast::Storage_Class storage_class = storage_classes.size() == 1 ? ast::get_storage_class(storage_classes[0]) : ast::Storage_Class::NONE;
 
-    if (storage_classes.size() == 1) {
-      storage_class = ast::get_storage_class(storage_classes[0]);
-    } else {
-      storage_class = ast::Storage_Class::NONE;
-    }
-
-    return std::make_pair(type, storage_class); // nothing uses type for now so this is okay
+    return std::make_pair(std::move(type), storage_class);
   }
 
   // Handles file scope declarations
@@ -451,10 +534,11 @@ namespace parser {
     std::vector<std::unique_ptr<ast::Declaration>> declarations;
     std::vector<std::unique_ptr<ast::Expression>> global_expressions; // this is used to store variable declarations that are not part of a function declaration
     while (!tokens.empty()) {
-      if (!(type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end())) {
+      if (!(type_aliases.count(tokens.front()) || std::find(specifiers.begin(), specifiers.end(), tokens.front()) != specifiers.end() ||
+            std::find(type_specifiers.begin(), type_specifiers.end(), tokens.front()) != type_specifiers.end())) {
         throw std::runtime_error(std::format("Expected variable or function declaration, got {}.", tokens.front()));
       }
-      std::pair<ast::Type*, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
+      std::pair<std::unique_ptr<ast::Type>, ast::Storage_Class> type_and_storage_class = parse_type_and_storage_class(tokens);
 
       std::vector<std::unique_ptr<ast::Expression>> expressions; // doesnt matter if this is empty after move since global variables don't own expressions anyways
       ast::Declaration* declaration = parse_declaration(tokens, expressions, type_and_storage_class);

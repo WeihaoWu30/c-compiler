@@ -6,12 +6,15 @@
 #include "tacky/abstract/abstract.hpp"
 #include "tacky/operators/operators.hpp"
 #include "tacky/top_level/top_level.hpp"
+#include "tacky/values/var.hpp"
 #include <vector>
+#include <memory>
 
 namespace ir_gen {
   extern uint32_t id_counter;
   extern uint32_t label_counter;
   tacky::Identifier* make_identifier();
+  tacky::Var* make_temporary_var(std::shared_ptr<ast::Type> type, std::vector<std::unique_ptr<tacky::Val>>& values);
   tacky::Unary_Operator convert_unop(ast::Unary_Operator op);
   tacky::Binary_Operator convert_to_binop(ast::Binary_Operator op);
   tacky::Binary_Operator convert_to_binop(ast::Compound_Operator op);
