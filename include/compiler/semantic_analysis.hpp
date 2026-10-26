@@ -22,6 +22,8 @@ namespace semantic_analysis {
   std::unordered_map<std::string, MapEntry> copy_identifier_map(std::unordered_map<std::string, MapEntry>& identifier_map);
   std::shared_ptr<ast::Type> get_common_type(std::shared_ptr<ast::Type> type1, std::shared_ptr<ast::Type> type2);
   ast::Expression* convert_to(ast::Expression* e, std::shared_ptr<ast::Type> t, std::vector<std::unique_ptr<ast::Expression>>& expressions);
+  bool type_matches(const ast::Type* type1, const ast::Type* type2);
+  bool type_matches(std::shared_ptr<ast::Type> type1, std::shared_ptr<ast::Type> type2);
   void resolve_block(ast::Block* block, std::unordered_map<std::string, MapEntry>& identifier_map, bool is_file_scope);
   void resolve_exp(ast::Expression* e, std::unordered_map<std::string, MapEntry>& identifier_map);
   void resolve_declaration(ast::Declaration* declaration, std::unordered_map<std::string, MapEntry>& identifier_map, bool is_file_scope);

@@ -2,10 +2,10 @@
 #include "aast/aast.hpp"
 #include "aast/instructions/binary.hpp"
 #include "aast/operands/reg.hpp"
+#include "ast/global_inits/global_inits.hpp"
+#include "ast/types/types.hpp"
 #include "compiler/tools.hpp"
 #include "tacky/tacky.hpp"
-#include "ast/types/types.hpp"
-#include "ast/global_inits/global_inits.hpp"
 #include <algorithm>
 #include <cstddef>
 #include <list>
@@ -62,7 +62,7 @@ namespace codegen {
     aast::Size size = get_size_based_on_val(t_val);
     if (t_constant) {
       std::unique_ptr<aast::Imm> immediate_value = nullptr;
-      if(std::holds_alternative<ast::ConstInt>(t_constant->val)) {
+      if (std::holds_alternative<ast::ConstInt>(t_constant->val)) {
         immediate_value = std::make_unique<aast::Imm>(std::get<ast::ConstInt>(t_constant->val).val, size);
       } else if (std::holds_alternative<ast::ConstLong>(t_constant->val)) {
         immediate_value = std::make_unique<aast::Imm>(std::get<ast::ConstLong>(t_constant->val).val, size);
@@ -220,8 +220,8 @@ namespace codegen {
       std::unique_ptr<aast::Cmp> cmp = std::make_unique<aast::Cmp>(src2, src1, src1_size);
       assembly_instructions.push_back(std::move(cmp));
 
-      std::unique_ptr<aast::Imm> imm = std::make_unique<aast::Imm>(0, src1_size);
       aast::Operand* dst = generate_operand(t_binary->dst, operands);
+      std::unique_ptr<aast::Imm> imm = std::make_unique<aast::Imm>(0, dst->size);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm.get(), dst, dst->size);
       assembly_instructions.push_back(std::move(mov));
       operands.push_back(std::move(imm));
@@ -340,7 +340,7 @@ namespace codegen {
     if (!copy) return;
     aast::Operand* src = generate_operand(copy->src, operands);
     aast::Operand* dst = generate_operand(copy->dst, operands);
-    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src, dst, src->size);
+    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src, dst, dst->size);
     assembly_instructions.push_back(std::move(mov));
   }
 
@@ -375,7 +375,7 @@ namespace codegen {
         std::unique_ptr<aast::Push> push = std::make_unique<aast::Push>(assembly_arg);
         assembly_instructions.push_back(std::move(push));
       } else {
-        std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(assembly_arg, dword_ax_reg.get(), assembly_arg->size);
+        std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(assembly_arg, assembly_arg->size == aast::Size::QWORD ? qword_ax_reg.get() : dword_ax_reg.get(), assembly_arg->size);
         assembly_instructions.push_back(std::move(mov));
         std::unique_ptr<aast::Push> push = std::make_unique<aast::Push>(qword_ax_reg.get());
         assembly_instructions.push_back(std::move(push));
@@ -395,7 +395,7 @@ namespace codegen {
     operands.push_back(std::move(reg));
 
     aast::Operand* assembly_dst = generate_operand(fun_call->dst, operands);
-    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(dword_ax_reg.get(), assembly_dst, assembly_dst->size);
+    std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(assembly_dst->size == aast::Size::QWORD ? qword_ax_reg.get() : dword_ax_reg.get(), assembly_dst, assembly_dst->size);
     assembly_instructions.push_back(std::move(mov));
     operands.push_back(std::move(qword_ax_reg));
     operands.push_back(std::move(dword_ax_reg));
@@ -417,10 +417,10 @@ namespace codegen {
     aast::Operand* dst = generate_operand(truncate->dst, operands);
     aast::Imm* imm = dynamic_cast<aast::Imm*>(src);
     if (imm)
-      if(std::holds_alternative<long>(imm->val) && ((std::get<long>(imm->val) >= INT_MAX) || (std::get<long>(imm->val) <= INT_MIN))) {
+      if (std::holds_alternative<long>(imm->val) && ((std::get<long>(imm->val) >= INT_MAX) || (std::get<long>(imm->val) <= INT_MIN))) {
         imm->val = static_cast<int>(std::get<long>(imm->val)); // truncate to 32 bits by masking with 0xFFFFFFFF and taking the lower 32 bits
         imm->size = aast::Size::DWORD;
-    }
+      }
     std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(src, dst, aast::Size::DWORD);
     assembly_instructions.push_back(std::move(mov));
   }
@@ -443,16 +443,13 @@ namespace codegen {
     }
   }
 
-
   // This function converts the temporary variable to a offset from the base caller address within the stack frame
   aast::Stack* replace_pseudo(aast::Pseudo* pseudo, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager) {
     std::string var(pseudo->identifier->text);
     if (!stack_manager.stack_offset.count(var)) { // Only add New Locations Created
       aast::Size size = get_size_based_on_name(var);
       stack_manager.total_bytes_to_reserve += (size == aast::Size::QWORD ? 8 : 4);
-      if (size == aast::Size::QWORD) {
-        stack_manager.total_bytes_to_reserve = static_cast<int>((stack_manager.total_bytes_to_reserve + 7) & ~std::size_t(7));
-      }
+      if (size == aast::Size::QWORD) { stack_manager.total_bytes_to_reserve = static_cast<int>((stack_manager.total_bytes_to_reserve + 7) & ~std::size_t(7)); }
       stack_manager.stack_offset[var] = -stack_manager.total_bytes_to_reserve;
       std::unique_ptr<aast::Stack> stack = std::make_unique<aast::Stack>(stack_manager.stack_offset[var], size);
       stack_manager.stack_objs.insert({stack_manager.stack_offset[var], stack.get()});
@@ -470,27 +467,25 @@ namespace codegen {
     aast::Pseudo* dst_pseudo = dynamic_cast<aast::Pseudo*>(mov->dst);
 
     aast::Stack* src_stack = src_pseudo ? replace_pseudo(src_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(mov->src);
-    if(src_stack) mov->src = src_stack;
+    if (src_stack) mov->src = src_stack;
     aast::Stack* dst_stack = dst_pseudo ? replace_pseudo(dst_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(mov->dst);
-    if(dst_stack) mov->dst = dst_stack;
+    if (dst_stack) mov->dst = dst_stack;
 
     aast::Data* src_data = dynamic_cast<aast::Data*>(mov->src);
     aast::Data* dst_data = dynamic_cast<aast::Data*>(mov->dst);
-   
+
     if ((src_stack || src_data) && (dst_stack || dst_data)) {
       // separate into 2 instructions using r10d register
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, mov->size);
-      std::unique_ptr<aast::Mov> new_mov =
-          std::make_unique<aast::Mov>(mov->src, reg.get(), mov->size); // copies src to register
+      std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(mov->src, reg.get(), mov->size); // copies src to register
 
-      mov->src = reg.get(); // replaces current temporary variable with register
+      mov->src = reg.get();                             // replaces current temporary variable with register
       it = instructions.insert(it, std::move(new_mov)); // Inserts before the current Mov Instruction
       operands.push_back(std::move(reg));
     }
 
     aast::Imm* src = dynamic_cast<aast::Imm*>(mov->src);
-    if (src && std::holds_alternative<long>(src->val) &&
-        ((std::get<long>(src->val) >= INT_MAX) || (std::get<long>(src->val) <= INT_MIN)) && (dst_stack || dst_data)) {
+    if (src && std::holds_alternative<long>(src->val) && ((std::get<long>(src->val) >= INT_MAX) || (std::get<long>(src->val) <= INT_MIN)) && (dst_stack || dst_data)) {
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, mov->size);
       std::unique_ptr<aast::Mov> new_mov = std::make_unique<aast::Mov>(mov->src, reg.get(), mov->size);
       mov->src = reg.get();
@@ -522,7 +517,7 @@ namespace codegen {
     aast::Pseudo* operand1_pseudo = dynamic_cast<aast::Pseudo*>(binary->operand1);
     aast::Stack* src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand1);
     if (src_stack) binary->operand1 = src_stack;
-    
+
     aast::Data* operand1_data = dynamic_cast<aast::Data*>(binary->operand1);
     if (src_stack || operand1_data) {
       std::unique_ptr<aast::Reg> reg1 = std::make_unique<aast::Reg>(aast::RegType::CX, binary->operand1->size);
@@ -539,7 +534,6 @@ namespace codegen {
     aast::Pseudo* operand2_pseudo = dynamic_cast<aast::Pseudo*>(binary->operand2);
     aast::Stack* dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand2);
     if (dst_stack) binary->operand2 = dst_stack;
-
 
     aast::Reg* reg = dynamic_cast<aast::Reg*>(binary->operand1);
     if (reg && (reg->size != aast::Size::BYTE || reg->reg_type != aast::RegType::CX)) {
@@ -566,10 +560,10 @@ namespace codegen {
     aast::Data* operand1_data = dynamic_cast<aast::Data*>(binary->operand1);
     aast::Pseudo* operand2_pseudo = dynamic_cast<aast::Pseudo*>(binary->operand2);
     aast::Data* operand2_data = dynamic_cast<aast::Data*>(binary->operand2);
-    aast::Stack *src_stack = src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand1);
-    if(src_stack) binary->operand1 = src_stack;
-    aast::Stack *dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack *>(binary->operand2);
-    if(dst_stack) binary->operand2 = dst_stack;
+    aast::Stack* src_stack = src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand1);
+    if (src_stack) binary->operand1 = src_stack;
+    aast::Stack* dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand2);
+    if (dst_stack) binary->operand2 = dst_stack;
 
     if ((src_stack || operand1_data) && (dst_stack || operand2_data)) { // same as mov with 2 addresses
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, binary->size);
@@ -607,15 +601,15 @@ namespace codegen {
     if (!mult) return;
     aast::Pseudo* src_pseudo = dynamic_cast<aast::Pseudo*>(binary->operand1);
     aast::Pseudo* dst_pseudo = dynamic_cast<aast::Pseudo*>(binary->operand2);
-    aast::Stack *src_stack = src_pseudo ? replace_pseudo(src_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand1);
-    if(src_stack) binary->operand1 = src_stack;
-    aast::Stack *dst_stack = dst_pseudo ? replace_pseudo(dst_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand2);
-    if(dst_stack) binary->operand2 = dst_stack;
+    aast::Stack* src_stack = src_pseudo ? replace_pseudo(src_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand1);
+    if (src_stack) binary->operand1 = src_stack;
+    aast::Stack* dst_stack = dst_pseudo ? replace_pseudo(dst_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(binary->operand2);
+    if (dst_stack) binary->operand2 = dst_stack;
 
     aast::Reg* dst_reg = dynamic_cast<aast::Reg*>(binary->operand2);
 
     aast::Imm* src = dynamic_cast<aast::Imm*>(binary->operand1);
-    if(src) {
+    if (src) {
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, binary->size);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(binary->operand1, reg.get(), binary->size);
       binary->operand1 = reg.get();
@@ -631,7 +625,7 @@ namespace codegen {
       ++it;
       std::unique_ptr<aast::Mov> mov2 = std::make_unique<aast::Mov>(reg.get(), binary->operand2, binary->size); // copies register content to the original address;
       it = instructions.insert(it, std::move(mov2));
-      binary->operand2 = reg.get();   // multiplies constant by content in register
+      binary->operand2 = reg.get(); // multiplies constant by content in register
       operands.push_back(std::move(reg));
     }
   }
@@ -649,7 +643,7 @@ namespace codegen {
       idiv->operand = stack ? static_cast<aast::Operand*>(stack) : static_cast<aast::Operand*>(operand_data);
     } else if (imm_val) {
       std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, idiv->size);
-      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm_val, reg.get(), imm_val->size); // copies divisor into a register and then apply the division onto that register directly
+      std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(imm_val, reg.get(), idiv->size); // copies divisor into a register and then apply the division onto that register directly
       // aast::Mov Instruction uses its immediate value so we can't delete
       idiv->operand = reg.get();
       it = instructions.insert(it, std::move(mov));
@@ -667,11 +661,11 @@ namespace codegen {
     aast::Pseudo* operand2_pseudo = dynamic_cast<aast::Pseudo*>(cmp->operand2);
     aast::Data* operand2_data = dynamic_cast<aast::Data*>(cmp->operand2);
     aast::Stack* src_stack = src_stack = operand1_pseudo ? replace_pseudo(operand1_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(cmp->operand1);
-    if(src_stack) cmp->operand1 = src_stack;
+    if (src_stack) cmp->operand1 = src_stack;
     aast::Stack* dst_stack = operand2_pseudo ? replace_pseudo(operand2_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(cmp->operand2);
-    if(dst_stack) cmp->operand2 = dst_stack;
+    if (dst_stack) cmp->operand2 = dst_stack;
     if ((src_stack || operand1_data) && (dst_stack || operand2_data)) {
-      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, aast::Size::DWORD);
+      std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::R10, cmp->size);
       std::unique_ptr<aast::Mov> mov = std::make_unique<aast::Mov>(cmp->operand1, reg.get(), cmp->size);
       it = instructions.insert(it, std::move(mov));
       ++it;
@@ -710,7 +704,8 @@ namespace codegen {
     }
   }
 
-  void fix_movsx(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::list<std::unique_ptr<aast::Instruction>>& instructions, std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager) {
+  void fix_movsx(typename std::list<std::unique_ptr<aast::Instruction>>::iterator& it, std::list<std::unique_ptr<aast::Instruction>>& instructions,
+                 std::vector<std::unique_ptr<aast::Operand>>& operands, StackManager& stack_manager) {
     aast::Movsx* movsx = dynamic_cast<aast::Movsx*>(it->get());
     if (!movsx) return;
     aast::Pseudo* src_pseudo = dynamic_cast<aast::Pseudo*>(movsx->src);
@@ -720,11 +715,10 @@ namespace codegen {
     aast::Data* src_data = dynamic_cast<aast::Data*>(movsx->src);
 
     aast::Stack* src_stack = src_pseudo ? replace_pseudo(src_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(movsx->src);
-    if(src_stack) movsx->src = src_stack;
+    if (src_stack) movsx->src = src_stack;
     aast::Stack* dst_stack = dst_pseudo ? replace_pseudo(dst_pseudo, operands, stack_manager) : dynamic_cast<aast::Stack*>(movsx->dst);
-    if(dst_stack) movsx->dst = dst_stack;
+    if (dst_stack) movsx->dst = dst_stack;
     if (!src_stack && !src_data && !src_reg && !dst_reg) {
-
       std::unique_ptr<aast::Reg> r10_reg = std::make_unique<aast::Reg>(aast::RegType::R10, movsx->src->size);
       std::unique_ptr<aast::Mov> mov_src_to_r10 = std::make_unique<aast::Mov>(movsx->src, r10_reg.get(), movsx->src->size);
       it = instructions.insert(it, std::move(mov_src_to_r10));
@@ -790,12 +784,12 @@ namespace codegen {
       fix_push(it, instructions, operands, stack_manager);
     }
 
-    int stack_size = static_cast<int>((stack_manager.total_bytes_to_reserve + 15) & ~std::size_t(15));      // rounds to the nearest multiple of 16
+    int stack_size = static_cast<int>((stack_manager.total_bytes_to_reserve + 15) & ~std::size_t(15)); // rounds to the nearest multiple of 16
     // Reserves memory in stack frame for local variables
     std::unique_ptr<aast::Imm> imm = std::make_unique<aast::Imm>(stack_size, aast::Size::QWORD);
     std::unique_ptr<aast::Reg> reg = std::make_unique<aast::Reg>(aast::RegType::SP, aast::Size::QWORD);
     // subtracts the stack size from the stack pointer
-    std::unique_ptr<aast::Binary> binary = std::make_unique<aast::Binary>(new aast::Sub(), imm.get(), reg.get(), aast::Size::DWORD);
+    std::unique_ptr<aast::Binary> binary = std::make_unique<aast::Binary>(new aast::Sub(), imm.get(), reg.get(), aast::Size::QWORD);
     auto it = instructions.insert(instructions.begin(), std::move(binary));
     operands.push_back(std::move(imm));
     operands.push_back(std::move(reg));
@@ -853,9 +847,7 @@ namespace codegen {
     int alignment = 4;
     if (auto it = tools::frontend_symbols.find(static_variable->identifier->name); it != tools::frontend_symbols.end()) {
       ast::Type* type = it->second.first.get();
-      if (dynamic_cast<ast::Long*>(type)) {
-        alignment = 8;
-      }
+      if (dynamic_cast<ast::Long*>(type)) { alignment = 8; }
     } else {
       throw std::runtime_error("Static variable " + static_variable->identifier->name + " not found in symbols table");
     }

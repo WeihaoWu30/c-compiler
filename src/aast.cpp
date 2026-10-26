@@ -16,20 +16,22 @@ namespace aast {
   }
 
   std::ostream& operator<<(std::ostream& ostr, const Static_Variable& static_variable) {
-    if (static_variable.global) ostr << "\t" << ".globl ";
-    bool is_bss = false;
-    std::visit([&is_bss](auto& val) {
-      if(val.value == 0) is_bss = true;
-    }, static_variable.init);
+    if (static_variable.global) {
+      ostr << "\t" << ".globl ";
 #ifdef __APPLE__
-    ostr << "_";
+      ostr << "_";
 #endif
-    ostr << *static_variable.name << "\n";
+      ostr << *static_variable.name << "\n";
+    }
+    bool is_bss = false;
+    std::visit(
+        [&is_bss](auto& val) {
+          if (val.value == 0) is_bss = true;
+        },
+        static_variable.init);
     ostr << "\t" << (is_bss ? ".bss" : ".data") << "\n";
     ostr << "\t"
-         << ".balign "
-         << static_variable.alignment
-         << "\n";
+         << ".balign " << static_variable.alignment << "\n";
 #ifdef __APPLE__
     ostr << "_"; // add an underscore before the name for macos
 #endif
@@ -37,19 +39,19 @@ namespace aast {
     ostr << "\t";
 
     if (std::holds_alternative<ast::IntInit>(static_variable.init)) {
-      if(is_bss) {
+      if (is_bss) {
         ostr << ".zero 4";
       } else {
         ostr << ".long " << std::get<ast::IntInit>(static_variable.init).value;
       }
     } else {
-      if(is_bss) {
+      if (is_bss) {
         ostr << ".zero 8";
       } else {
         ostr << ".quad " << std::get<ast::LongInit>(static_variable.init).value;
       }
     }
-    
+
     ostr << "\n";
     return ostr;
   }
@@ -61,13 +63,17 @@ namespace aast {
 
   std::ostream& operator<<(std::ostream& ostr, const Function& function) {
     // Add underscore before function name for macos
-    if (function.global)
+    if (function.global) {
       ostr << "\t" << ".globl ";
 #ifdef __APPLE__
-    ostr << "_";;
+      ostr << "_";
+#endif
+      ostr << *function.name << "\n";
+    }
+#ifdef __APPLE__
+    ostr << "_";
 #endif
     ostr << *function.name << ":\n";
-
     ostr << "\t"
          << "pushq\t%rbp\n";
     ostr << "\t"

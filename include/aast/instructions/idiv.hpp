@@ -12,9 +12,6 @@ namespace aast {
     Idiv(Operand* operand_, aast::Size size_) : operand(operand_), size(size_) {}
 
   protected:
-    void write(std::ostream& ostr) const override {
-      ostr << "idivl"
-           << "\t" << *operand << "\n";
-    }
+    void write(std::ostream& ostr) const override { ostr << "idiv" << (size == aast::Size::DWORD ? "l" : "q") << "\t" << *operand << "\n"; }
   };
 } // namespace aast

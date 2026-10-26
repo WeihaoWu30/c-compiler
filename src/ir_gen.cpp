@@ -122,13 +122,11 @@ namespace ir_gen {
       std::unique_ptr<tacky::JumpIfZero> right_jmp_if_zero = std::make_unique<tacky::JumpIfZero>(right, right_false_identifier);
       instructions.push_back(std::move(right_jmp_if_zero));
 
+      tacky::Var* result = make_temporary_var(std::make_shared<ast::Int>(), values);
       ast::Const const_int_one = ast::ConstInt(1);
       std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(std::move(const_int_one));
-      tacky::Identifier* result_identifier_one = make_identifier();
-      std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
-      std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
+      std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result);
       values.push_back(std::move(const_one));
-      values.push_back(std::move(result_one));
       instructions.push_back(std::move(copy_one));
 
       tacky::Identifier* end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
@@ -141,21 +139,15 @@ namespace ir_gen {
 
       ast::Const const_int_zero = ast::ConstInt(0);
       std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(std::move(const_int_zero));
-      tacky::Identifier* result_identifier_zero = new tacky::Identifier(result_identifier_one->name);
-      std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
-      std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
+      std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result);
       values.push_back(std::move(const_zero));
-      values.push_back(std::move(result_zero));
       instructions.push_back(std::move(copy_zero));
 
       tacky::Identifier* end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
       std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
       instructions.push_back(std::move(end_label));
 
-      tacky::Identifier* dst_name = new tacky::Identifier(result_identifier_zero->name);
-      std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-      values.push_back(std::move(dst));
-      return values.back().get();
+      return result;
     } else if (binary && binary->binary_operator == ast::Binary_Operator::Or) {
       tacky::Val* left = emit_tacky(binary->left, instructions, values);
       tacky::Identifier* left_true_identifier = new tacky::Identifier("true" + std::to_string(label_counter++));
@@ -167,13 +159,11 @@ namespace ir_gen {
       std::unique_ptr<tacky::JumpIfNotZero> right_jmp_if_not_zero = std::make_unique<tacky::JumpIfNotZero>(right, right_true_identifier);
       instructions.push_back(std::move(right_jmp_if_not_zero));
 
+      tacky::Var* result = make_temporary_var(std::make_shared<ast::Int>(), values);
       ast::Const const_int_zero = ast::ConstInt(0);
       std::unique_ptr<tacky::Constant> const_zero = std::make_unique<tacky::Constant>(std::move(const_int_zero));
-      tacky::Identifier* result_identifier_zero = make_identifier();
-      std::unique_ptr<tacky::Var> result_zero = std::make_unique<tacky::Var>(result_identifier_zero);
-      std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result_zero.get());
+      std::unique_ptr<tacky::Copy> copy_zero = std::make_unique<tacky::Copy>(const_zero.get(), result);
       values.push_back(std::move(const_zero));
-      values.push_back(std::move(result_zero));
       instructions.push_back(std::move(copy_zero));
 
       tacky::Identifier* end_jmp_identifier = new tacky::Identifier("end" + std::to_string(label_counter++));
@@ -186,21 +176,15 @@ namespace ir_gen {
 
       ast::Const const_int_one = ast::ConstInt(1);
       std::unique_ptr<tacky::Constant> const_one = std::make_unique<tacky::Constant>(std::move(const_int_one));
-      tacky::Identifier* result_identifier_one = new tacky::Identifier(result_identifier_zero->name);
-      std::unique_ptr<tacky::Var> result_one = std::make_unique<tacky::Var>(result_identifier_one);
-      std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result_one.get());
+      std::unique_ptr<tacky::Copy> copy_one = std::make_unique<tacky::Copy>(const_one.get(), result);
       values.push_back(std::move(const_one));
-      values.push_back(std::move(result_one));
       instructions.push_back(std::move(copy_one));
 
       tacky::Identifier* end_label_identifier = new tacky::Identifier(end_jmp_identifier->name);
       std::unique_ptr<tacky::Label> end_label = std::make_unique<tacky::Label>(end_label_identifier);
       instructions.push_back(std::move(end_label));
 
-      tacky::Identifier* dst_name = new tacky::Identifier(result_identifier_one->name);
-      std::unique_ptr<tacky::Var> dst = std::make_unique<tacky::Var>(dst_name);
-      values.push_back(std::move(dst));
-      return values.back().get();
+      return result;
     } else if (binary) {
       tacky::Val* src1 = emit_tacky(binary->left, instructions, values);
       tacky::Val* src2 = emit_tacky(binary->right, instructions, values);
@@ -258,11 +242,9 @@ namespace ir_gen {
       instructions.push_back(std::move(conditional_jmp));
 
       // emit instructions for true branch and copy the result into a shared result variable
+      tacky::Var* result = make_temporary_var(conditional->left->type, values);
       tacky::Val* expression_one_result = emit_tacky(conditional->left, instructions, values);
-      tacky::Identifier* expression_one_result_identifier = make_identifier();
-      std::unique_ptr<tacky::Var> expression_one_result_dst = std::make_unique<tacky::Var>(expression_one_result_identifier);
-      std::unique_ptr<tacky::Copy> expression_one_copy = std::make_unique<tacky::Copy>(expression_one_result, expression_one_result_dst.get());
-      values.push_back(std::move(expression_one_result_dst));
+      std::unique_ptr<tacky::Copy> expression_one_copy = std::make_unique<tacky::Copy>(expression_one_result, result);
       instructions.push_back(std::move(expression_one_copy));
 
       // after true branch, jump to the end
@@ -277,10 +259,7 @@ namespace ir_gen {
 
       // emit instructions for false branch and copy the result into a shared result variable
       tacky::Val* expression_two_result = emit_tacky(conditional->right, instructions, values);
-      tacky::Identifier* expression_two_result_identifier = new tacky::Identifier(expression_one_result_identifier->name);
-      std::unique_ptr<tacky::Var> expression_two_result_dst = std::make_unique<tacky::Var>(expression_two_result_identifier);
-      std::unique_ptr<tacky::Copy> expression_two_copy = std::make_unique<tacky::Copy>(expression_two_result, expression_two_result_dst.get());
-      values.push_back(std::move(expression_two_result_dst));
+      std::unique_ptr<tacky::Copy> expression_two_copy = std::make_unique<tacky::Copy>(expression_two_result, result);
       instructions.push_back(std::move(expression_two_copy));
 
       // end label
@@ -289,10 +268,7 @@ namespace ir_gen {
       instructions.push_back(std::move(end_label));
 
       // return a Var with the shared destination name as the result of the conditional
-      tacky::Identifier* result_identifier = new tacky::Identifier(expression_two_result_identifier->name);
-      std::unique_ptr<tacky::Var> result_var = std::make_unique<tacky::Var>(result_identifier);
-      values.push_back(std::move(result_var));
-      return values.back().get();
+      return result;
     }
     ast::Function_Call* function_call = dynamic_cast<ast::Function_Call*>(e);
     if (function_call) {
@@ -514,7 +490,7 @@ namespace ir_gen {
   // This function converts AST function to Tacky function
   tacky::Function generate_function(ast::Fun_Decl* function_declaration) {
     std::vector<std::unique_ptr<tacky::Identifier>> params;
-    for (auto& param : function_declaration->params) { params.emplace_back(new tacky::Identifier(param->text)); }
+    for (auto& [identifier, _] : function_declaration->params) { params.emplace_back(new tacky::Identifier(identifier->text)); }
     std::vector<std::unique_ptr<tacky::Instruction>> instructions;
     std::vector<std::unique_ptr<tacky::Val>> values;
     ast::Identifier* a_identifier = function_declaration->name;
